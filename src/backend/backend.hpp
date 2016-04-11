@@ -3,7 +3,7 @@
  * @brief This file provides the backend interface
  * @details The backend interface can be implemented independently
  *          for different interconnects or purposes.
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
 #ifndef argo_backend_backend_hpp

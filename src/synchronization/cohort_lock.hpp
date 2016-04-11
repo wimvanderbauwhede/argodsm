@@ -2,7 +2,7 @@
  * @file
  * @brief This file provides a cohort lock for the ArgoDSM system
  * @todo Better documentation
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
 #ifndef argo_cohort_lock_hpp

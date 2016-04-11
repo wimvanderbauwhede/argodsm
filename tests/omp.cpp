@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief This file provides tests using OpenMP in ArgoDSM
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
 #include <iostream>

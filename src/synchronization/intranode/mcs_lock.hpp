@@ -3,7 +3,7 @@
  * @brief MCS lock for local use
  * @todo Better documentation
  * @todo namespace use and indentation in this file is inconsistent with other files
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 #ifndef MCS_LOCK_HPP_LDFPXGTZ
 #define MCS_LOCK_HPP_LDFPXGTZ

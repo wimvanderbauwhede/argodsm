@@ -3,7 +3,7 @@
  * @brief This file provides an MCS-style lock for the ArgoDSM system
  * @todo Better documentation
  * @todo namespace use and indentation in this file is inconsistent with other files
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
 #include <thread>

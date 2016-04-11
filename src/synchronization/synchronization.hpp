@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief This file provides synchronization primitives for ArgoDSM
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
 #ifndef argo_synchronization_hpp

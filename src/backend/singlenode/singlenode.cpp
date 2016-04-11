@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief pseudo-backend implemenation for a single node ArgoDSM system
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
 #include "../../data_distribution/data_distribution.hpp"
