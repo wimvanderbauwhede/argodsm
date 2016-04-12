@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief dummy lock, not intended for public use
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  *
  * @internal
  * @details sometimes templates should be used with and without internal locking, this file provides the neccessary dummy class to allow disabling locking

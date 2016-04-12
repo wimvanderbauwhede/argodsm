@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief This file provides a (local) ticket lock for intranode locking in the ArgoDSM system
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
 #ifndef argo_local_ticket_lock_hpp

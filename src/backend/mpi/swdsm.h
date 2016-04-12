@@ -1,7 +1,7 @@
 /**
  * @file
  * @brief this is a legacy file from the ArgoDSM prototype
- * @copyright Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+ * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  * @deprecated this file is legacy and will be removed as soon as possible
  * @warning do not rely on functions from this file
  */

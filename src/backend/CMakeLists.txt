@@ -1,4 +1,4 @@
-# Copyright (C) Eta Scale AB. Licensed under the ArgoDSM Open Source License. See the LICENSE file for details.
+# Copyright (C) Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
 
 # which backends to enable?
 option(ARGO_BACKEND_SINGLENODE
