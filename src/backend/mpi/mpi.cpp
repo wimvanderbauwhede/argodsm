@@ -6,6 +6,7 @@
 
 #include "../backend.hpp"
 
+#include <atomic>
 #include <type_traits>
 
 #include "mpi.h"
@@ -34,6 +35,99 @@ extern MPI_Win  *globalDataWindow;
 #include <semaphore.h>
 extern sem_t ibsem;
 
+/**
+ * @brief Returns an MPI integer type that exactly matches in size the argument given
+ *
+ * @param size The size of the datatype to be returned
+ * @return An MPI datatype with MPI_Type_size == size
+ */
+static MPI_Datatype fitting_mpi_int(std::size_t size) {
+	MPI_Datatype t_type;
+	using namespace argo;
+
+	switch (size) {
+	case 1:
+		t_type = MPI_INT8_T;
+		break;
+	case 2:
+		t_type = MPI_INT16_T;
+		break;
+	case 4:
+		t_type = MPI_INT32_T;
+		break;
+	case 8:
+		t_type = MPI_INT64_T;
+		break;
+	default:
+		throw std::invalid_argument(
+			"Invalid size (must be either 1, 2, 4 or 8)");
+		break;
+	}
+
+	return t_type;
+}
+
+/**
+ * @brief Returns an MPI unsigned integer type that exactly matches in size the argument given
+ *
+ * @param size The size of the datatype to be returned
+ * @return An MPI datatype with MPI_Type_size == size
+ */
+static MPI_Datatype fitting_mpi_uint(std::size_t size) {
+	MPI_Datatype t_type;
+	using namespace argo;
+
+	switch (size) {
+	case 1:
+		t_type = MPI_UINT8_T;
+		break;
+	case 2:
+		t_type = MPI_UINT16_T;
+		break;
+	case 4:
+		t_type = MPI_UINT32_T;
+		break;
+	case 8:
+		t_type = MPI_UINT64_T;
+		break;
+	default:
+		throw std::invalid_argument(
+			"Invalid size (must be either 1, 2, 4 or 8)");
+		break;
+	}
+
+	return t_type;
+}
+
+/**
+ * @brief Returns an MPI floating point type that exactly matches in size the argument given
+ *
+ * @param size The size of the datatype to be returned
+ * @return An MPI datatype with MPI_Type_size == size
+ */
+static MPI_Datatype fitting_mpi_float(std::size_t size) {
+	MPI_Datatype t_type;
+	using namespace argo;
+
+	switch (size) {
+	case 4:
+		t_type = MPI_FLOAT;
+		break;
+	case 8:
+		t_type = MPI_DOUBLE;
+		break;
+	case 16:
+		t_type = MPI_LONG_DOUBLE;
+		break;
+	default:
+		throw std::invalid_argument(
+			"Invalid size (must be power either 4, 8 or 16)");
+		break;
+	}
+
+	return t_type;
+}
+
 namespace argo {
 	namespace backend {
 		void init(std::size_t size) {
@@ -60,63 +154,6 @@ namespace argo {
 			argo_finalize();
 		}
 
-		template<typename T>
-		T atomic_exchange(global_ptr<T> obj, T desired, atomic::memory_order order) {
-			using namespace atomic;
-#if __GNUC__ >= 5 || __clang__
-			static_assert(
-				std::is_trivially_copy_assignable<T>::value,
-				"T must be trivially copy assignable"
-			);
-#endif // __GNUC__ >= 5 || __clang__
-
-			if (order == memory_order::acq_rel || order == memory_order::release)
-				argo_release();
-
-			char out_buffer[sizeof(T)];
-			sem_wait(&ibsem);
-			// Create a new MPI datatype with size == sizeof(T)
-			MPI_Datatype t_type;
-			MPI_Type_contiguous(sizeof(T), MPI_BYTE, &t_type);
-			MPI_Type_commit(&t_type);
-			// Perform the exchange operation
-			MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
-			MPI_Fetch_and_op(&desired, out_buffer, t_type, obj.node(), obj.offset(), MPI_REPLACE, globalDataWindow[0]);
-			MPI_Win_unlock(obj.node(), globalDataWindow[0]);
-			// Cleanup
-			MPI_Type_free(&t_type);
-			sem_post(&ibsem);
-
-			if (order == memory_order::acq_rel || order == memory_order::acquire)
-				argo_acquire();
-
-			// char[N] decays to char *
-			return *reinterpret_cast<T*>(out_buffer);
-		}
-
-		template<typename T>
-		void store(global_ptr<T> obj, T value) {
-#if __GNUC__ >= 5 || __clang__
-			static_assert(
-				std::is_trivially_copy_assignable<T>::value,
-				"T must be trivially copy assignable"
-			);
-#endif // __GNUC__ >= 5 || __clang__
-			argo_release();
-			sem_wait(&ibsem);
-			// Create a new MPI datatype with size == sizeof(T)
-			MPI_Datatype t_type;
-			MPI_Type_contiguous(sizeof(T), MPI_BYTE, &t_type);
-			MPI_Type_commit(&t_type);
-			// Perform the store operation
-			MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
-			MPI_Put(&value, 1, t_type, obj.node(), obj.offset(), 1, t_type, globalDataWindow[0]);
-			MPI_Win_unlock(obj.node(), globalDataWindow[0]);
-			// Cleanup
-			MPI_Type_free(&t_type);
-			sem_post(&ibsem);
-		}
-
 		void barrier(std::size_t tc) {
 			swdsm_argo_barrier(tc);
 		}
@@ -130,13 +167,104 @@ namespace argo {
 
 		void acquire() {
 			argo_acquire();
+			std::atomic_thread_fence(std::memory_order_acquire);
 		}
-
 		void release() {
+			std::atomic_thread_fence(std::memory_order_release);
 			argo_release();
 		}
 
-#		include "../explicit_instantiations.inc.cpp"
+#include "../explicit_instantiations.inc.cpp"
 
+		namespace atomic {
+			void _exchange(global_ptr<void> obj, void* desired,
+					std::size_t size, void* output_buffer) {
+				sem_wait(&ibsem);
+				MPI_Datatype t_type = fitting_mpi_int(size);
+				// Perform the exchange operation
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
+				MPI_Fetch_and_op(desired, output_buffer, t_type, obj.node(), obj.offset(), MPI_REPLACE, globalDataWindow[0]);
+				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				// Cleanup
+				sem_post(&ibsem);
+			}
+
+			void _store(global_ptr<void> obj, void* desired, std::size_t size) {
+				sem_wait(&ibsem);
+				MPI_Datatype t_type = fitting_mpi_int(size);
+				// Perform the store operation
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
+				MPI_Put(desired, 1, t_type, obj.node(), obj.offset(), 1, t_type, globalDataWindow[0]);
+				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				// Cleanup
+				sem_post(&ibsem);
+			}
+
+			void _load(global_ptr<void> obj, std::size_t size,
+					void* output_buffer) {
+				sem_wait(&ibsem);
+				MPI_Datatype t_type = fitting_mpi_int(size);
+				// Perform the store operation
+				MPI_Win_lock(MPI_LOCK_SHARED, obj.node(), 0, globalDataWindow[0]);
+				MPI_Get(output_buffer, 1, t_type, obj.node(), obj.offset(), 1, t_type, globalDataWindow[0]);
+				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				// Cleanup
+				sem_post(&ibsem);
+			}
+
+			void _compare_exchange(global_ptr<void> obj, void* desired,
+					std::size_t size, void* expected, void* output_buffer) {
+				sem_wait(&ibsem);
+				MPI_Datatype t_type = fitting_mpi_int(size);
+				// Perform the store operation
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
+				MPI_Compare_and_swap(desired, expected, output_buffer, t_type, obj.node(), obj.offset(), globalDataWindow[0]);
+				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				// Cleanup
+				sem_post(&ibsem);
+			}
+
+			/**
+			 * @brief Atomic fetch&add for the MPI backend (for internal usage)
+			 *
+			 * This function requires the correct MPI type to work. Usually, you
+			 * want to use the three _fetch_add_{int,uint,float} functions
+			 * instead, which determine the correct type themselves and then
+			 * call this function
+			 *
+			 * @param obj The pointer to the memory location to modify
+			 * @param value Pointer to the value to add
+			 * @param t_type MPI type of the object, value, and output buffer
+			 * @param output_buffer Location to store the return value
+			 */
+			void _fetch_add(global_ptr<void> obj, void* value,
+					MPI_Datatype t_type, void* output_buffer) {
+				sem_wait(&ibsem);
+				// Perform the exchange operation
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, obj.node(), 0, globalDataWindow[0]);
+				MPI_Fetch_and_op(value, output_buffer, t_type, obj.node(), obj.offset(), MPI_SUM, globalDataWindow[0]);
+				MPI_Win_unlock(obj.node(), globalDataWindow[0]);
+				// Cleanup
+				sem_post(&ibsem);
+			}
+
+			void _fetch_add_int(global_ptr<void> obj, void* value,
+					std::size_t size, void* output_buffer) {
+				MPI_Datatype t_type = fitting_mpi_int(size);
+				_fetch_add(obj, value, t_type, output_buffer);
+			}
+
+			void _fetch_add_uint(global_ptr<void> obj, void* value,
+					std::size_t size, void* output_buffer) {
+				MPI_Datatype t_type = fitting_mpi_uint(size);
+				_fetch_add(obj, value, t_type, output_buffer);
+			}
+
+			void _fetch_add_float(global_ptr<void> obj, void* value,
+					std::size_t size, void* output_buffer) {
+				MPI_Datatype t_type = fitting_mpi_float(size);
+				_fetch_add(obj, value, t_type, output_buffer);
+			}
+		} // namespace atomic
 	} // namespace backend
 } // namespace argo
