@@ -11,8 +11,9 @@
 
 #include <atomic>
 #include <condition_variable>
-#include <cstddef>
 #include <mutex>
+#include <cstddef>
+#include <cstring>
 
 /** @brief a lock for atomically executed operations */
 std::mutex atomic_op_mutex;
@@ -79,20 +80,6 @@ namespace argo {
 		void finalize() {
 		}
 
-		template<typename T>
-		T atomic_exchange(global_ptr<T> obj, T desired, atomic::memory_order order) {
-			(void)order; /// @todo Use the memory order
-			lock_guard lock(atomic_op_mutex);
-			T old = *obj;
-			*obj = desired;
-			return old;
-		}
-
-		template<typename T>
-		void store(global_ptr<T> obj, T value) {
-			*obj = value;
-		}
-
 		void barrier(std::size_t threadcount) {
 			/* initially: flag = false */
 			std::unique_lock<std::mutex> barrier_lock(barrier_mutex);
@@ -133,9 +120,157 @@ namespace argo {
 
 #		include "../explicit_instantiations.inc.cpp"
 
-		/** @bug should perhaps do some acq/rel on local memory */
-		void acquire(){return;}
-		void release(){return;}
+		void acquire() {
+			std::atomic_thread_fence(std::memory_order_acquire);
+		}
+		void release() {
+			std::atomic_thread_fence(std::memory_order_release);
+		}
+
+		namespace atomic {
+			void _exchange(global_ptr<void> obj, void* desired,
+					std::size_t size, void* output_buffer) {
+				lock_guard lock(atomic_op_mutex);
+				memcpy(output_buffer, obj.get(), size);
+				memcpy(obj.get(), desired, size);
+			}
+
+			void _store(global_ptr<void> obj, void* desired, std::size_t size) {
+				lock_guard lock(atomic_op_mutex);
+				memcpy(obj.get(), desired, size);
+			}
+
+			void _load(
+					global_ptr<void> obj, std::size_t size, void* output_buffer) {
+				lock_guard lock(atomic_op_mutex);
+				memcpy(output_buffer, obj.get(), size);
+			}
+
+			void _compare_exchange(global_ptr<void> obj, void* desired,
+					std::size_t size, void* expected, void* output_buffer) {
+				lock_guard lock(atomic_op_mutex);
+				memcpy(output_buffer, obj.get(), size);
+				if (memcmp(obj.get(), expected, size) == 0) {
+					memcpy(obj.get(), desired, size);
+				}
+			}
+
+			void _fetch_add_int(global_ptr<void> obj, void* value,
+					std::size_t size, void* output_buffer) {
+				lock_guard lock(atomic_op_mutex);
+				memcpy(output_buffer, obj.get(), size);
+				// ewwww...
+				switch (size) {
+					case 1:
+						{
+							char *ptr = static_cast<char*>(obj.get());
+							char *val = static_cast<char*>(value);
+							*ptr += *val;
+							break;
+						}
+					case 2:
+						{
+							int16_t *ptr = static_cast<int16_t*>(obj.get());
+							int16_t *val = static_cast<int16_t*>(value);
+							*ptr += *val;
+							break;
+						}
+					case 4:
+						{
+							int32_t *ptr = static_cast<int32_t*>(obj.get());
+							int32_t *val = static_cast<int32_t*>(value);
+							*ptr += *val;
+							break;
+						}
+					case 8:
+						{
+							int64_t *ptr = static_cast<int64_t*>(obj.get());
+							int64_t *val = static_cast<int64_t*>(value);
+							*ptr += *val;
+							break;
+						}
+					default:
+						throw std::invalid_argument(
+							"Invalid size (must be power either 1, 2, 4 or 8)");
+						break;
+				}
+			}
+
+			void _fetch_add_uint(global_ptr<void> obj, void* value,
+					std::size_t size, void* output_buffer) {
+				lock_guard lock(atomic_op_mutex);
+				memcpy(output_buffer, obj.get(), size);
+				// ewwww...
+				switch (size) {
+					case 1:
+						{
+							unsigned char *ptr = static_cast<unsigned char*>(obj.get());
+							unsigned char *val = static_cast<unsigned char*>(value);
+							*ptr += *val;
+							break;
+						}
+					case 2:
+						{
+							uint16_t *ptr = static_cast<uint16_t*>(obj.get());
+							uint16_t *val = static_cast<uint16_t*>(value);
+							*ptr += *val;
+							break;
+						}
+					case 4:
+						{
+							uint32_t *ptr = static_cast<uint32_t*>(obj.get());
+							uint32_t *val = static_cast<uint32_t*>(value);
+							*ptr += *val;
+							break;
+						}
+					case 8:
+						{
+							uint64_t *ptr = static_cast<uint64_t*>(obj.get());
+							uint64_t *val = static_cast<uint64_t*>(value);
+							*ptr += *val;
+							break;
+						}
+					default:
+						throw std::invalid_argument(
+							"Invalid size (must be power either 1, 2, 4 or 8)");
+						break;
+				}
+			}
+
+			void _fetch_add_float(global_ptr<void> obj, void* value,
+					std::size_t size, void* output_buffer) {
+				lock_guard lock(atomic_op_mutex);
+				memcpy(output_buffer, obj.get(), size);
+				// ewwww...
+				switch (size) {
+					case sizeof(float):
+						{
+							float *ptr = static_cast<float*>(obj.get());
+							float *val = static_cast<float*>(value);
+							*ptr += *val;
+							break;
+						}
+					case sizeof(double):
+						{
+							double *ptr = static_cast<double*>(obj.get());
+							double *val = static_cast<double*>(value);
+							*ptr += *val;
+							break;
+						}
+					case sizeof(long double):
+						{
+							long double *ptr = static_cast<long double*>(obj.get());
+							long double *val = static_cast<long double*>(value);
+							*ptr += *val;
+							break;
+						}
+					default:
+						throw std::invalid_argument(
+							"Invalid size (must be power either 1, 2, 4 or 8)");
+						break;
+				}
+			}
+		} // namespace atomic
 
 	} // namespace backend
 } // namespace argo

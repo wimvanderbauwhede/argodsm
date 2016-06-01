@@ -7,6 +7,7 @@
 #ifndef argo_data_distribution_hpp
 #define argo_data_distribution_hpp argo_global_lock_hpp
 
+#include <type_traits>
 #include <cstddef>
 
 #include "../types/types.hpp"
@@ -44,6 +45,14 @@ namespace argo {
 					{}
 
 				/**
+				 * @brief Copy constructor between different pointer types
+				 * @param other The pointer to copy from
+				 */
+				template<typename U>
+				explicit global_ptr(global_ptr<U> other)
+					: homenode(other.node()), local_offset(other.offset()) {}
+
+				/**
 				 * @brief get standard pointer
 				 * @return pointer to object this smart pointer is pointing to
 				 * @todo implement
@@ -56,7 +65,7 @@ namespace argo {
 				 * @brief dereference smart pointer
 				 * @return dereferenced object
 				 */
-				T& operator*() const {
+				typename std::add_lvalue_reference<T>::type operator*() const {
 					return *this->get();
 				}
 

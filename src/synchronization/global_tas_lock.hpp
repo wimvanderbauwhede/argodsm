@@ -45,7 +45,7 @@ namespace argo {
 				 *         false otherwise
 				 */
 				bool try_lock() {
-					auto old = backend::atomic_exchange(flag, locked, atomic::memory_order::relaxed);
+					auto old = backend::atomic::exchange(flag, locked, atomic::memory_order::relaxed);
 					if(old == unlocked){
 						backend::acquire();
 						return true;
@@ -60,7 +60,7 @@ namespace argo {
 				 */
 				void unlock() {
 					backend::release();
-					backend::store(flag, unlocked);
+					backend::atomic::store(flag, unlocked);
 				}
 
 				/**
