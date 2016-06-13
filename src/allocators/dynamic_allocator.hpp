@@ -178,6 +178,23 @@ namespace argo {
 				}
 		};
 
+		/**
+		 * @brief test dynamic allocators for equality
+		 * @return always true
+		 */
+		template<typename T, typename U>
+		bool operator==(const dynamic_allocator<T>&, const dynamic_allocator<U>&) {
+			return true;
+		}
+
+		/**
+		 * @brief test dynamic allocators for inequality
+		 * @return always false
+		 */
+		template<typename T, typename U>
+		bool operator!=(const dynamic_allocator<T>&, const dynamic_allocator<U>&) {
+			return false;
+		}
 
 	} // namespace allocators
 
@@ -344,23 +361,5 @@ namespace argo {
 	}
 
 } // namespace argo
-
-/**
- * @brief test dynamic allocators for equality
- * @return always true
- */
-template<typename T, typename U>
-bool operator==(const argo::allocators::dynamic_allocator<T>&, const argo::allocators::dynamic_allocator<U>&) {
-	return true;
-}
-
-/**
- * @brief test dynamic allocators for inequality
- * @return always false
- */
-template<typename T, typename U>
-bool operator!=(const argo::allocators::dynamic_allocator<T>&, const argo::allocators::dynamic_allocator<U>&) {
-	return false;
-}
 
 #endif /* argo_dynamic_allocators_hpp */
