@@ -659,6 +659,7 @@ void *writeloop(void * x){
 		sem_post(&ibsem);
 		sem_post(&writerwaitsem);
 	}
+	return nullptr;
 }
 
 void * loadcacheline(void * x){
@@ -815,6 +816,7 @@ void * loadcacheline(void * x){
 		sem_post(&ibsem);
 
 	}
+	return nullptr;
 }
 
 void * prefetchcacheline(void * x){
@@ -966,6 +968,7 @@ void * prefetchcacheline(void * x){
 		sem_post(&prefetchwaitsem);
 		sem_post(&ibsem);
 	}
+	return nullptr;
 }
 
 
