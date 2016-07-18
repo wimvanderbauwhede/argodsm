@@ -362,7 +362,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 
 	pthread_mutex_lock(&cachemutex);
 
-	/** @brief page is local */
+	/* page is local */
 	if(homenode == (getID())){
 		int n;
 		sem_wait(&ibsem);
@@ -388,16 +388,14 @@ void handler(int sig, siginfo_t *si, void *unused){
 					throw "bad owner in local access";
 				}
 				else{
-					/** @brief update remote private holder to shared */
+					/* update remote private holder to shared */
 					MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx,1,MPI_LONG,MPI_BOR,sharerWindow);
 					MPI_Win_unlock(owner, sharerWindow);
 				}
 			}
-			/**
-			 *@brief set page to permit reads and map it to the page cache
-			 *@todo Set cache offset to a variable instead of calculating it here
-			 */
+			/* set page to permit reads and map it to the page cache */
+			/** @todo Set cache offset to a variable instead of calculating it here */
 			localAlignedAddr = (unsigned long *)mmap(localAlignedAddr,pagesize*CACHELINE,PROT_READ,MAP_SHARED|MAP_FIXED,fd,cacheoffset+offset);
 			if(localAlignedAddr== MAP_FAILED){
 				printf("mmap failed in ArgoDSM address %p errno:%d - likely due to out of memory or too many memory mappings per process (check errno) \n",localAlignedAddr,errno);
@@ -407,14 +405,14 @@ void handler(int sig, siginfo_t *si, void *unused){
 		}
 		else{
 
-			/** @brief get current sharers/writers and then add your own id */
+			/* get current sharers/writers and then add your own id */
 			MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
 			unsigned long sharers = globalSharers[classidx];
 			unsigned long writers = globalSharers[classidx+1];
 			globalSharers[classidx+1] |= id;
 			MPI_Win_unlock(workrank, sharerWindow);
 
-			/** @brief remote single writer */
+			/* remote single writer */
 			if(writers != id && writers != 0 && isPowerOf2(writers&invid)){
 				int n;
 				for(n=0; n<numtasks; n++){
@@ -437,7 +435,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 					}
 				}
 			}
-			/** @brief set page to permit read/write and map it to the page cache */
+			/* set page to permit read/write and map it to the page cache */
 			localAlignedAddr =  (unsigned long *) mmap(localAlignedAddr,pagesize*CACHELINE,PROT_READ|PROT_WRITE,MAP_SHARED|MAP_FIXED,fd,cacheoffset+offset);
 			if(localAlignedAddr== MAP_FAILED){
 				printf("mmap failed in ArgoDSM address %p errno:%d - likely due to out of memory or too many memory mappings per process (check errno) \n",localAlignedAddr,errno);
@@ -556,13 +554,13 @@ void handler(int sig, siginfo_t *si, void *unused){
 	unsigned long writers = globalSharers[classidx+1];
 	unsigned long sharers = globalSharers[classidx];
 	MPI_Win_unlock(workrank, sharerWindow);
-	/** @brief Either already registered write - or 1 or 0 other writers already cached */
+	/* Either already registered write - or 1 or 0 other writers already cached */
 	if(writers != id && isPowerOf2(writers)){
 		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
 		globalSharers[classidx+1] |= id; //register locally
 		MPI_Win_unlock(workrank, sharerWindow);
 
-		/** @brief register and get latest sharers / writers */
+		/* register and get latest sharers / writers */
 		MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 		MPI_Get_accumulate(&id, 1,MPI_LONG,&writers,1,MPI_LONG,homenode,
 											 classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
@@ -575,7 +573,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 		globalSharers[classidx] |= sharers;
 		MPI_Win_unlock(workrank, sharerWindow);
 
-		/** @brief check if we need to update */
+		/* check if we need to update */
 		if(writers != id && writers != 0 && isPowerOf2(writers&invid)){
 			int n;
 			for(n=0; n<numtasks; n++){
