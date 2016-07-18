@@ -1065,8 +1065,8 @@ void argo_initialize(unsigned long long size){
 	initmpi();
 	unsigned long alignment = pagesize*CACHELINE*numtasks;
 	if((size%alignment)>0){
+		size += alignment - 1;
 		size /= alignment;
-		size++;
 		size *= alignment;
 	}
 
