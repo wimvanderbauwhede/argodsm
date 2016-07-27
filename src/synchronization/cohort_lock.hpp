@@ -18,7 +18,11 @@
 #include <vector>
 
 #include <sched.h>
+#include <unistd.h>
+
+#ifdef ARGO_USE_LIBNUMA
 #include <numa.h>
+#endif
 
 extern "C" {
 #include "cohort_lock.h"
@@ -108,20 +112,28 @@ namespace argo {
 				 */
 				cohort_lock() :
 					has_global_lock(false),
-					numanodes(numa_num_configured_nodes()),
-					handovers(new int[numanodes]()),
+					numanodes(1), // sane default
 					numahandover(0),
 					nodelockowner(NO_OWNER),
 					tas_flag(argo::conew_<bool>(false)),
 					global_lock(new argo::globallock::global_tas_lock(tas_flag)),
-					local_lock(new argo::locallock::mcs_lock[numanodes]),
 					node_lock(new argo::locallock::ticket_lock())
 				{
-					// Initialize the NUMA map
-					int num_cpus = numa_num_configured_cpus();
-					numa_mapping.resize(num_cpus);
-					for (int i = 0; i < num_cpus; ++i)
-						numa_mapping[i] = numa_node_of_cpu(i);
+					int num_cpus = sysconf(_SC_NPROCESSORS_CONF); // sane default
+					numa_mapping.resize(num_cpus, 0);
+					#ifdef ARGO_USE_LIBNUMA
+					/* use libnuma only if it is actually available */
+					if(numa_available() != -1) {
+						numanodes = numa_num_configured_nodes();
+						/* Initialize the NUMA map */
+						for (int i = 0; i < num_cpus; ++i) {
+							numa_mapping[i] = numa_node_of_cpu(i);
+						}
+					}
+					#endif
+					/* initialize hierarchy components */
+					handovers = new int[numanodes]();
+					local_lock = new argo::locallock::mcs_lock[numanodes];
 				}
 
 				/** @todo Documentation */

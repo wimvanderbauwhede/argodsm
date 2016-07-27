@@ -35,9 +35,11 @@ namespace argo {
 			public:
 				/**
 				 * @brief construct global tas lock from existing flag in global address space
-				 * @param flag pointer to global flag
+				 * @param f pointer to global flag
 				 */
-				global_tas_lock(bool* flag) : flag(global_flag(flag)) {};
+				global_tas_lock(bool* f) : flag(global_flag(f)) {
+					*flag = unlocked;
+				};
 
 				/**
 				 * @brief try to lock
