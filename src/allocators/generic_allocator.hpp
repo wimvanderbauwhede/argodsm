@@ -220,9 +220,11 @@ namespace argo {
 						allocation = static_cast<T*>(mempool->reserve(n*sizeof(T)));
 					} catch (typename MemoryPool::bad_alloc) {
 						auto avail = mempool->available();
-						allocation = static_cast<T*>(mempool->reserve(avail));
-						freelist[avail].push(allocation);
-						allocation_size.insert({{allocation, n}});
+						if(avail > 0) {
+							allocation = static_cast<T*>(mempool->reserve(avail));
+							freelist[avail].push(allocation);
+							allocation_size.insert({{allocation, n}});
+						}
 						try {
 							mempool->grow(n*sizeof(T));
 						}catch(std::bad_alloc){
