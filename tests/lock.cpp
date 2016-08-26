@@ -207,7 +207,7 @@ TEST_F(LockTest, StressMCSLock) {
 TEST_F(LockTest, StressMCSMultipleLocks) {
 	std::thread threads[nThreads];
 	int locks = 4;
-	counter = new int();
+	counter = new int(0);
 	mcs_lock = new argo::locallock::mcs_lock[locks];
 	argo::locallock::mcs_lock *global_lock = new argo::locallock::mcs_lock;
 

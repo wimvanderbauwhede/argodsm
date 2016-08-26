@@ -22,7 +22,15 @@ endforeach(src)
 
 # add the frontend library
 add_library(argo ${argo_sources})
-target_link_libraries(argo numa)
+
+
+option(ARGO_USE_LIBNUMA
+	"Use libnuma to determine NUMA structure within ArgoDSM" ON)
+if(ARGO_USE_LIBNUMA)
+	target_link_libraries(argo numa)
+	add_definitions(-DARGO_USE_LIBNUMA)
+endif(ARGO_USE_LIBNUMA)
+
 #install (TARGETS argo DESTINATION bin)
 
 install(TARGETS argo
