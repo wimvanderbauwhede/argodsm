@@ -30,7 +30,7 @@ respectively are required.
 
 ### Building ArgoDSM
 
-~~~ bash
+``` bash
 git clone https://github.com/etascale/argodsm.git
 cd argodsm
 cd tests
@@ -49,37 +49,37 @@ cmake -DARGO_BACKEND_MPI=ON        \
       ../
 make
 make test
-~~~
+```
 
 Initially, you need to get the ArgoDSM sources. If you already have a tarball,
 you can skip this step and just extract its contents. Otherwise, if you have
 access to it, you can get the latest code from the Github repository.
 
-~~~ bash
+``` bash
 git clone https://github.com/etascale/argodsm.git
 cd argodsm
-~~~
+```
 
 If you are planning on building the ArgoDSM tests (recommended), you also need
 the [googletest](https://github.com/google/googletest/) framework. Extract it
 into the `tests` folder, and make sure that its folder is named `gtest-1.7.0`.
 
-~~~ bash
+``` bash
 cd tests
 wget https://github.com/google/googletest/archive/release-1.7.0.zip
 unzip release-1.7.0.zip
 mv googletest-release-1.7.0 gtest-1.7.0
 cd ..
-~~~
+```
 
 CMake supports building in a separate folder. This is recommended for two
 reasons. First of all, it makes cleaning up much easier. Second, it allows for
 different builds with different configurations to exist in parallel.
 
-~~~ bash
+``` bash
 mkdir build
 cd build
-~~~
+```
 
 In order to generate the makefiles with CMake, you can use either the `cmake` or
 the `ccmake` tool. The difference is that the first one accepts all the build
@@ -89,7 +89,7 @@ arguments. If you plan on contributing to the ArgoDSM source code, you should
 also enable the `ARGO_DEBUG` option. After generating the makefiles, then just
 build the library and executables with a simple make command.
 
-~~~ bash
+``` bash
 cmake -DARGO_BACKEND_MPI=ON        \
       -DARGO_BACKEND_SINGLENODE=ON \
       -DARGO_TESTS=ON              \
@@ -98,7 +98,7 @@ cmake -DARGO_BACKEND_MPI=ON        \
       -DCMAKE_C_COMPILER=mpicc     \
       ../
 make
-~~~
+```
 
 After the build process has finished, all the executables can be found in the
 `bin` directory. It will contain different subdirectories, one for each backend.
@@ -109,9 +109,9 @@ If you want to build and manually compile your own applications, you can find
 the libraries in the `lib` directory. You need to link with the main `libargo`
 library, as well as *exactly* one of the backend libraries.
 
-~~~ bash
+``` bash
 make test
-~~~
+```
 
 Keep in mind that currently even the MPI tests are run on a single node without
 invoking `mpirun`. After running the previous command, you should also run the
@@ -128,13 +128,13 @@ application. You should refer to your MPI's vendor documentation for more
 details. If you are using OpenMPI on a cluster with InfiniBand interconnects, we
 recommend the following:
 
-~~~ bash
+``` bash
 mpirun --map-by ppr:1:node      \
        --mca mpi_leave_pinned 1 \
        --mca btl openib,self,sm \
        -n ${NNODES}             \
        ${EXECUTABLE}
-~~~
+```
 
 `${NNODES}` is the number of hardware nodes you have available and
 `${EXECUTABLE}` is the application to run. If you are not using InfiniBand, you
