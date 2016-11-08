@@ -4,16 +4,19 @@
  * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
-#include "../../data_distribution/data_distribution.hpp"
-#include "../../synchronization/global_tas_lock.hpp"
-#include "../../types/types.hpp"
+#include "data_distribution/data_distribution.hpp"
+#include "synchronization/global_tas_lock.hpp"
+#include "types/types.hpp"
+#include "virtual_memory/virtual_memory.hpp"
 #include "../backend.hpp"
 
 #include <atomic>
 #include <condition_variable>
-#include <mutex>
 #include <cstddef>
 #include <cstring>
+#include <mutex>
+
+namespace vm = argo::virtual_memory;
 
 /** @brief a lock for atomically executed operations */
 std::mutex atomic_op_mutex;
@@ -55,7 +58,7 @@ namespace argo {
 	namespace backend {
 
 		void init(std::size_t size) {
-			memory = new char[size];
+			memory = static_cast<char*>(vm::allocate_mappable(4096, size));
 			memory_size = size;
 			using namespace data_distribution;
 			naive_data_distribution<0>::set_memory_space(nodes, memory, size);
