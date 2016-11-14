@@ -26,6 +26,8 @@ namespace {
 	const char* ARGO_END   = (char*) 0x600000000000l;
 	/** @todo hardcoded size */
 	const ptrdiff_t ARGO_SIZE = ARGO_END - ARGO_START;
+	/** @todo hardcoded maximum size */
+	const ptrdiff_t ARGO_SIZE_LIMIT = 0x80000000000l;
 
 	/** @brief error message string */
 	const std::string msg_alloc_fail = "ArgoDSM could not allocate mappable memory";
@@ -50,8 +52,9 @@ namespace argo {
 			struct statvfs b;
 			statvfs("/dev/shm", &b);
 			avail = b.f_bavail * b.f_bsize;
-			if(avail > static_cast<unsigned long>(ARGO_SIZE)/2u)
-				avail = ARGO_SIZE/2;
+			if(avail > static_cast<unsigned long>(ARGO_SIZE_LIMIT)) {
+				avail = ARGO_SIZE_LIMIT;
+			}
 			std::string filename = "/argocache" + std::to_string(getpid());
 			fd = shm_open(filename.c_str(), O_RDWR|O_CREAT, 0644);
 			if(shm_unlink(filename.c_str())) {
