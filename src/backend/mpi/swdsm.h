@@ -10,27 +10,29 @@
 #define argo_swdsm_h argo_swdsm_h
 
 /* Includes */
+#include <cstdint>
 #include <type_traits>
-#include "mpi.h"
-#include "argo.h"
-#include <stdio.h>
+
+#include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <malloc.h>
+#include <math.h>
+#include <mpi.h>
 #include <pthread.h>
+#include <omp.h>
+#include <semaphore.h>
+#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <math.h>
-#include <omp.h>
-#include <signal.h>
-#include <malloc.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <assert.h>
-#include <semaphore.h>
-#include <unistd.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
+#include "argo.h"
 /** @brief Granularity of coherence unit / pagesize  */
 #define GRAN 4096L //page size.
 

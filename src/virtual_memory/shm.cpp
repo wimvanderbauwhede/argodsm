@@ -83,10 +83,11 @@ namespace argo {
 		}
 
 		void* allocate_mappable(std::size_t alignment, std::size_t size) {
-			auto p = aligned_alloc(alignment, size);
-			if(p == nullptr) {
+			void* p;
+			auto r = posix_memalign(&p, alignment, size);
+			if(r || p == nullptr) {
 				std::cerr << msg_alloc_fail << std::endl;
-				throw std::system_error(std::make_error_code(static_cast<std::errc>(errno)), msg_alloc_fail);
+				throw std::system_error(std::make_error_code(static_cast<std::errc>(r)), msg_alloc_fail);
 				return nullptr;
 			}
 			return p;
