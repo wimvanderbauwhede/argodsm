@@ -9,6 +9,9 @@
 #include "allocators/collective_allocator.hpp"
 #include "allocators/dynamic_allocator.hpp"
 
+#include "virtual_memory/virtual_memory.hpp"
+
+namespace vm = argo::virtual_memory;
 namespace mem = argo::mempools;
 namespace alloc = argo::allocators;
 
@@ -20,6 +23,7 @@ mem::dynamic_memory_pool<alloc::global_allocator, mem::ALWAYS> dynamic_prepool(&
 
 namespace argo {
 	void init(size_t size) {
+		vm::init();
 		default_global_mempool = new mem::global_memory_pool<>(size);
 		argo_reset();
 	}

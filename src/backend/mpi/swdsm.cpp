@@ -3,7 +3,10 @@
  * @brief This file implements the MPI-backend of ArgoDSM
  * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
+#include "virtual_memory/virtual_memory.hpp"
 #include "swdsm.h"
+
+namespace vm = argo::virtual_memory;
 
 /*Treads*/
 /** @brief Thread loads data into cache */
@@ -36,7 +39,7 @@ unsigned long classificationSize;
 /** @brief  Tracks if a page is touched this epoch*/
 argo_byte * touchedcache;
 /** @brief  The local page cache*/
-argo_byte * cacheData;
+char* cacheData;
 /** @brief Copy of the local cache to keep twinpages for later being able to DIFF stores */
 char * pagecopy;
 /** @brief Protects the pagecache */
@@ -107,12 +110,6 @@ sem_t prefetchstartsem;
 /** @brief signalhandler waits on this to complete a transfer */
 sem_t prefetchwaitsem;
 
-/*Backing file*/
-/** @brief  Filename for file backing cache*/
-char filename[MPI_MAX_PROCESSOR_NAME];
-/** @brief  file descriptor for backing file*/
-unsigned int fd;
-
 /*Global lock*/
 /** @brief  Local flags we spin on for the global lock*/
 unsigned long * lockbuffer;
@@ -131,7 +128,7 @@ pthread_mutex_t gmallocmutex = PTHREAD_MUTEX_INITIALIZER;
 /** @brief  Points to start of global address space*/
 void * startAddr;
 /** @brief  Points to start of global address space this process is serving */
-argo_byte * globalData;
+char* globalData;
 /** @brief  Size of global address space*/
 unsigned long size_of_all;
 /** @brief  Size of this process part of global address space*/
@@ -362,7 +359,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 
 	pthread_mutex_lock(&cachemutex);
 
-	/** @brief page is local */
+	/* page is local */
 	if(homenode == (getID())){
 		int n;
 		sem_wait(&ibsem);
@@ -388,33 +385,27 @@ void handler(int sig, siginfo_t *si, void *unused){
 					throw "bad owner in local access";
 				}
 				else{
-					/** @brief update remote private holder to shared */
+					/* update remote private holder to shared */
 					MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx,1,MPI_LONG,MPI_BOR,sharerWindow);
 					MPI_Win_unlock(owner, sharerWindow);
 				}
 			}
-			/**
-			 *@brief set page to permit reads and map it to the page cache
-			 *@todo Set cache offset to a variable instead of calculating it here
-			 */
-			localAlignedAddr = (unsigned long *)mmap(localAlignedAddr,pagesize*CACHELINE,PROT_READ,MAP_SHARED|MAP_FIXED,fd,cacheoffset+offset);
-			if(localAlignedAddr== MAP_FAILED){
-				printf("mmap failed in ArgoDSM address %p errno:%d - likely due to out of memory or too many memory mappings per process (check errno) \n",localAlignedAddr,errno);
-				exit(EXIT_FAILURE);
-			}
+			/* set page to permit reads and map it to the page cache */
+			/** @todo Set cache offset to a variable instead of calculating it here */
+			vm::map_memory(localAlignedAddr, pagesize*CACHELINE, cacheoffset+offset, PROT_READ);
 
 		}
 		else{
 
-			/** @brief get current sharers/writers and then add your own id */
+			/* get current sharers/writers and then add your own id */
 			MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
 			unsigned long sharers = globalSharers[classidx];
 			unsigned long writers = globalSharers[classidx+1];
 			globalSharers[classidx+1] |= id;
 			MPI_Win_unlock(workrank, sharerWindow);
 
-			/** @brief remote single writer */
+			/* remote single writer */
 			if(writers != id && writers != 0 && isPowerOf2(writers&invid)){
 				int n;
 				for(n=0; n<numtasks; n++){
@@ -437,12 +428,8 @@ void handler(int sig, siginfo_t *si, void *unused){
 					}
 				}
 			}
-			/** @brief set page to permit read/write and map it to the page cache */
-			localAlignedAddr =  (unsigned long *) mmap(localAlignedAddr,pagesize*CACHELINE,PROT_READ|PROT_WRITE,MAP_SHARED|MAP_FIXED,fd,cacheoffset+offset);
-			if(localAlignedAddr== MAP_FAILED){
-				printf("mmap failed in ArgoDSM address %p errno:%d - likely due to out of memory or too many memory mappings per process (check errno) \n",localAlignedAddr,errno);
-				exit(EXIT_FAILURE);
-			}
+			/* set page to permit read/write and map it to the page cache */
+			vm::map_memory(localAlignedAddr, pagesize*CACHELINE, cacheoffset+offset, PROT_READ|PROT_WRITE);
 
 		}
 		sem_post(&ibsem);
@@ -556,16 +543,16 @@ void handler(int sig, siginfo_t *si, void *unused){
 	unsigned long writers = globalSharers[classidx+1];
 	unsigned long sharers = globalSharers[classidx];
 	MPI_Win_unlock(workrank, sharerWindow);
-	/** @brief Either already registered write - or 1 or 0 other writers already cached */
+	/* Either already registered write - or 1 or 0 other writers already cached */
 	if(writers != id && isPowerOf2(writers)){
 		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
 		globalSharers[classidx+1] |= id; //register locally
 		MPI_Win_unlock(workrank, sharerWindow);
 
-		/** @brief register and get latest sharers / writers */
+		/* register and get latest sharers / writers */
 		MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
 		MPI_Get_accumulate(&id, 1,MPI_LONG,&writers,1,MPI_LONG,homenode,
-											 classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
+			classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 		MPI_Get(&sharers,1, MPI_LONG, homenode, classidx, 1,MPI_LONG,sharerWindow);
 		MPI_Win_unlock(homenode, sharerWindow);
 		/* We get result of accumulation before operation so we need to account for that */
@@ -575,7 +562,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 		globalSharers[classidx] |= sharers;
 		MPI_Win_unlock(workrank, sharerWindow);
 
-		/** @brief check if we need to update */
+		/* check if we need to update */
 		if(writers != id && writers != 0 && isPowerOf2(writers&invid)){
 			int n;
 			for(n=0; n<numtasks; n++){
@@ -621,7 +608,8 @@ unsigned long getHomenode(unsigned long addr){
 }
 
 unsigned long getOffset(unsigned long addr){
-	unsigned long offset = addr - (getHomenode(addr))*size_of_chunk;//offset in local memory on remote node (homenode
+	//offset in local memory on remote node (homenode)
+	unsigned long offset = addr - (getHomenode(addr))*size_of_chunk;
 	if(offset >=size_of_chunk){
 		exit(EXIT_FAILURE);
 	}
@@ -661,6 +649,7 @@ void *writeloop(void * x){
 		sem_post(&ibsem);
 		sem_post(&writerwaitsem);
 	}
+	return nullptr;
 }
 
 void * loadcacheline(void * x){
@@ -740,7 +729,7 @@ void * loadcacheline(void * x){
 					cacheControl[startidx].tag = lineAddr;
 
 					cacheControl[startidx].dirty=CLEAN;
-					lineptr =  mmap(lineptr, blocksize, PROT_NONE,MAP_SHARED|MAP_FIXED,fd,pagesize*startidx);
+					vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_NONE);
 					mprotect(tmpptr2,blocksize,PROT_NONE);
 				}
 				pthread_mutex_unlock(&wbmutex);
@@ -762,7 +751,8 @@ void * loadcacheline(void * x){
 
 		if(prevsharer==0 ){ //if there is strictly less than two 'stable' sharers
 			MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
-			MPI_Get_accumulate(&id, 1,MPI_LONG,&tempsharer,1,MPI_LONG,homenode,classidx,1,MPI_LONG,MPI_BOR,sharerWindow);
+			MPI_Get_accumulate(&id, 1, MPI_LONG, &tempsharer, 1, MPI_LONG,
+				homenode, classidx, 1, MPI_LONG, MPI_BOR, sharerWindow);
 			MPI_Get(&tempwriter, 1,MPI_LONG,homenode,classidx+1,1,MPI_LONG,sharerWindow);
 			MPI_Win_unlock(homenode, sharerWindow);
 		}
@@ -799,11 +789,7 @@ void * loadcacheline(void * x){
 		MPI_Win_unlock(homenode, globalDataWindow[homenode]);
 
 		if(cacheControl[startidx].tag == GLOBAL_NULL){
-			lineptr =  mmap(lineptr, blocksize, PROT_READ,MAP_SHARED|MAP_FIXED,fd,pagesize*startidx);
-			if(lineptr== MAP_FAILED){
-				printf("MMAP failed %p errno:%d\n",lineptr,errno);
-				exit(EXIT_FAILURE);
-			}
+			vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_READ);
 			cacheControl[startidx].tag = lineAddr;
 		}
 		else{
@@ -817,6 +803,7 @@ void * loadcacheline(void * x){
 		sem_post(&ibsem);
 
 	}
+	return nullptr;
 }
 
 void * prefetchcacheline(void * x){
@@ -896,7 +883,7 @@ void * prefetchcacheline(void * x){
 					cacheControl[startidx].tag = lineAddr;
 					cacheControl[startidx].dirty=CLEAN;
 
-					lineptr =  mmap(lineptr, blocksize, PROT_NONE,MAP_SHARED|MAP_FIXED,fd,pagesize*startidx);
+					vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_NONE);
 					mprotect(tmpptr2,blocksize,PROT_NONE);
 
 				}
@@ -917,7 +904,8 @@ void * prefetchcacheline(void * x){
 
 		if(prevsharer==0 ){ //if there is strictly less than two 'stable' sharers
 			MPI_Win_lock(MPI_LOCK_SHARED, homenode, 0, sharerWindow);
-			MPI_Get_accumulate(&id, 1,MPI_LONG,&tempsharer,1,MPI_LONG,homenode,classidx,1,MPI_LONG,MPI_BOR,sharerWindow);
+			MPI_Get_accumulate(&id, 1, MPI_LONG, &tempsharer, 1, MPI_LONG,
+				homenode, classidx, 1, MPI_LONG, MPI_BOR, sharerWindow);
 			MPI_Get(&tempwriter, 1,MPI_LONG,homenode,classidx+1,1,MPI_LONG,sharerWindow);
 			MPI_Win_unlock(homenode, sharerWindow);
 		}
@@ -946,16 +934,13 @@ void * prefetchcacheline(void * x){
 		}
 
 		MPI_Win_lock(MPI_LOCK_SHARED, homenode , 0, globalDataWindow[homenode]);
-		MPI_Get(&cacheData[startidx*pagesize],1,cacheblock,homenode, offset, 1,cacheblock,globalDataWindow[homenode]);
+		MPI_Get(&cacheData[startidx*pagesize], 1, cacheblock, homenode,
+			offset, 1, cacheblock, globalDataWindow[homenode]);
 		MPI_Win_unlock(homenode, globalDataWindow[homenode]);
 
 
 		if(cacheControl[startidx].tag == GLOBAL_NULL){
-			lineptr =  mmap(lineptr, blocksize, PROT_READ,MAP_SHARED|MAP_FIXED,fd,pagesize*startidx);
-			if(lineptr== MAP_FAILED){
-				printf("MMAP failed %p errno:%d\n",lineptr,errno);
-				exit(EXIT_FAILURE);
-			}
+			vm::map_memory(lineptr, blocksize, pagesize*startidx, PROT_READ);
 			cacheControl[startidx].tag = lineAddr;
 		}
 		else{
@@ -968,6 +953,7 @@ void * prefetchcacheline(void * x){
 		sem_post(&prefetchwaitsem);
 		sem_post(&ibsem);
 	}
+	return nullptr;
 }
 
 
@@ -1064,16 +1050,15 @@ void argo_initialize(unsigned long long size){
 	initmpi();
 	unsigned long alignment = pagesize*CACHELINE*numtasks;
 	if((size%alignment)>0){
+		size += alignment - 1;
 		size /= alignment;
-		size++;
 		size *= alignment;
 	}
 
-	startAddr = mmap((void *)(pagesize*2000000000L), size, PROT_NONE, MAP_ANON|MAP_SHARED, 0, 0);
-	if(startAddr == (void *) -1){
-		printf("startmap error  errno %d  tried to allocate :%llu bytes    startaddr:%lu\n",errno,size,pagesize*2000000000L);
-		exit(EXIT_FAILURE);
-	}
+	startAddr = vm::start_address();
+#ifdef ARGO_PRINT_STATISTICS
+	printf("maximum virtual memory: %ld GiB\n", vm::size() >> 30);
+#endif
 
 	threadbarrier = (pthread_barrier_t *) malloc(sizeof(pthread_barrier_t)*(NUM_THREADS+1));
 	for(i = 1; i <= NUM_THREADS; i++){
@@ -1150,96 +1135,46 @@ void argo_initialize(unsigned long long size){
 	gwritersize *= pagesize;
 
 	cacheoffset = pagesize*cachesize+cacheControlSize;
-	globalData= (argo_byte *) memalign(pagesize,size_of_chunk);
-	if(globalData == NULL){
-		printf("memalign error out of memory\n");
-		exit(EXIT_FAILURE);
-	}
 
-	cacheData = (argo_byte*)memalign(pagesize, cachesize*pagesize);
-	if(cacheData == NULL){
-		printf("memalign error out of memory\n");
-		exit(EXIT_FAILURE);
-	}
-
-	cacheControl = (control_data *) memalign(pagesize,cacheControlSize);
-	if(cacheControl == NULL){
-		printf("memalign error out of memory\n");
-		exit(EXIT_FAILURE);
-	}
+	globalData = static_cast<char*>(vm::allocate_mappable(pagesize, size_of_chunk));
+	cacheData = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
+	cacheControl = static_cast<control_data*>(vm::allocate_mappable(pagesize, cacheControlSize));
 
 	touchedcache = (argo_byte *)malloc(cachesize);
 	if(touchedcache == NULL){
-		printf("memalign error out of memory\n");
+		printf("malloc error out of memory\n");
 		exit(EXIT_FAILURE);
 	}
 
-	lockbuffer = (unsigned long *) memalign(pagesize,pagesize);
-	if(lockbuffer == NULL){
-		printf("memalign error out of memory\n");
-		exit(EXIT_FAILURE);
-	}
-
-	pagecopy = (char*) memalign(pagesize,cachesize*pagesize);
-	if(pagecopy == NULL){
-		printf("memalign error out of memory\n");
-		exit(EXIT_FAILURE);
-	}
-
-	globalSharers = (unsigned long *)memalign(pagesize,gwritersize);
-	if(globalSharers == NULL){
-		printf("memalign error out of memory\n");
-		exit(EXIT_FAILURE);
-	}
+	lockbuffer = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, pagesize));
+	pagecopy = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
+	globalSharers = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, gwritersize));
 
 	char processor_name[MPI_MAX_PROCESSOR_NAME];
 	int name_len;
 	MPI_Get_processor_name(processor_name, &name_len);
 
-	sprintf(filename, "argocache%d", rank);
-	fd = shm_open(filename,O_RDWR|O_CREAT,0664);
 	MPI_Barrier(MPI_COMM_WORLD);
-	unsigned long filesize = cachesize*pagesize*CACHELINE+cacheControlSize+size_of_chunk+pagesize+gwritersize+pagesize;
-	if(ftruncate(fd,filesize)) {
-		/// @todo this needs to be handled
-		exit(EXIT_FAILURE);
-	}
 
-	void * tmpcache;
+	void* tmpcache;
 	tmpcache=cacheData;
-	tmpcache =  mmap(tmpcache , pagesize*cachesize, PROT_READ|PROT_WRITE,MAP_SHARED|MAP_FIXED,fd,0);
-	if(tmpcache == (void *) -1){
-		printf("1mmap error  errno%d\n",errno);
-		exit(EXIT_FAILURE);
-	}
+	vm::map_memory(tmpcache, pagesize*cachesize, 0, PROT_READ|PROT_WRITE);
 
+	std::size_t current_offset = pagesize*cachesize;
 	tmpcache=cacheControl;
-	tmpcache =  mmap(tmpcache , cacheControlSize, PROT_READ|PROT_WRITE,MAP_SHARED|MAP_FIXED,fd,pagesize*cachesize );
-	if(tmpcache == (void *) -1){
-		printf("3mmap cachecontrol error  errno%d\n",errno);
-		exit(EXIT_FAILURE);
-	}
+	vm::map_memory(tmpcache, cacheControlSize, current_offset, PROT_READ|PROT_WRITE);
 
+	current_offset += cacheControlSize;
 	tmpcache=globalData;
-	tmpcache =  mmap(tmpcache , size_of_chunk, PROT_READ|PROT_WRITE,MAP_SHARED|MAP_FIXED,fd,pagesize*cachesize + cacheControlSize);
-	if(tmpcache == (void *) -1){
-		printf("4mmap error  errno%d  tmpacache:%p   size :%lu   offset:%lu\n",errno,tmpcache,size_of_chunk,pagesize*cachesize + cacheControlSize);
-		exit(EXIT_FAILURE);
-	}
+	vm::map_memory(tmpcache, size_of_chunk, current_offset, PROT_READ|PROT_WRITE);
 
+	current_offset += size_of_chunk;
 	tmpcache=globalSharers;
-	tmpcache =  mmap(tmpcache ,gwritersize , PROT_READ|PROT_WRITE,MAP_SHARED|MAP_FIXED,fd,pagesize*cachesize + cacheControlSize+size_of_chunk);
-	if(tmpcache == (void *) -1){
-		printf("global sharers mmap error  errno%d\n",errno);
-		exit(EXIT_FAILURE);
-	}
+	vm::map_memory(tmpcache, gwritersize, current_offset, PROT_READ|PROT_WRITE);
 
+	current_offset += gwritersize;
 	tmpcache=lockbuffer;
-	tmpcache =  mmap(tmpcache ,pagesize , PROT_READ|PROT_WRITE,MAP_SHARED|MAP_FIXED,fd,pagesize*cachesize + cacheControlSize+size_of_chunk+gwritersize);
-	if(tmpcache == (void *) -1){
-		printf("lockbuffer mmap error lockbuffer errno%d\n",errno);
-		exit(EXIT_FAILURE);
-	}
+	vm::map_memory(tmpcache, pagesize, current_offset, PROT_READ|PROT_WRITE);
 
 	sem_init(&loadwaitsem,0,0);
 	sem_init(&loadstartsem,0,0);
@@ -1482,13 +1417,13 @@ void storepageDIFF(unsigned long index, unsigned long addr){
 		}
 		else{
 			if(cnt > 0){
-				MPI_Put(&real[(i)-cnt] ,cnt, MPI_BYTE, homenode, offset+((i)-cnt), cnt, MPI_BYTE, globalDataWindow[homenode]);
+				MPI_Put(&real[i-cnt], cnt, MPI_BYTE, homenode, offset+(i-cnt), cnt, MPI_BYTE, globalDataWindow[homenode]);
 				cnt = 0;
 			}
 		}
 	}
 	if(cnt > 0){
-		MPI_Put(&real[(i)-cnt] ,cnt, MPI_BYTE, homenode, offset+((i)-cnt), cnt, MPI_BYTE, globalDataWindow[homenode]);
+		MPI_Put(&real[i-cnt], cnt, MPI_BYTE, homenode, offset+(i-cnt), cnt, MPI_BYTE, globalDataWindow[homenode]);
 	}
 	stats.stores++;
 }
@@ -1498,7 +1433,8 @@ void printStatistics(){
 	printf("# PROCESS ID %d \n",workrank);
 	printf("cachesize:%ld,CACHELINE:%ld wbsize:%ld\n",cachesize,CACHELINE,writebuffersize);
 	printf("     writebacktime+=(t2-t1): %lf\n",stats.writebacktime);
-	printf("# Storetime : %lf , loadtime :%lf flushtime:%lf, writebacktime: %lf\n",stats.storetime,stats.loadtime,stats.flushtime, stats.writebacktime);
+	printf("# Storetime : %lf , loadtime :%lf flushtime:%lf, writebacktime: %lf\n",
+		stats.storetime, stats.loadtime, stats.flushtime, stats.writebacktime);
 	printf("# Barriertime : %lf, selfinvtime %lf\n",stats.barriertime, stats.selfinvtime);
 	printf("stores:%lu, loads:%lu, barriers:%lu\n",stats.stores,stats.loads,stats.barriers);
 	printf("Locks:%d\n",stats.locks);

@@ -32,6 +32,7 @@ endfunction(enable_openmp)
 # Unit Tests
 ################################
 # Add test cpp file
+forall_backends(trivialTests trivial.cpp)
 forall_backends(allocatorsTests allocators.cpp)
 forall_backends(prefetchTests prefetch.cpp)
 forall_backends(ompTests omp.cpp)

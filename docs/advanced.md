@@ -67,3 +67,21 @@ initialization, destruction is performed. So, instead of accepting
 function argument is accepted, and that is the pointer to the memory that will
 be deallocated.
 
+
+## Virtual Memory Management
+
+To manage the virtual address space for ArgoDSM applications we acquire large
+amounts of virtual memory. There are currently three ways to acquire the
+underlying memory for ArgoDSM, and exactly one must be selected at compile time:
+
+1. POSIX shared memory objects (`-DARGO_VM_SHM`)
+2. `memfd_create` syscall (`-DARGO_VM_MEMFD`)
+3. anonymous remappable memory (`-DARGO_VM_ANONYMOUS`)
+
+Each version has its own downsides:
+1. POSIX shared memory objects are size-limited and require `/dev/shm` support.
+2. `memfd_create` requires Linux kernel version of 3.17+ and memory overcommit.
+3. anonymous remappable memory has a runtime overhead and relies on kernel
+   functionality that is deprecated since Linux version 3.16.
+
+For now, the default is to use POSIX shared memory objects.
