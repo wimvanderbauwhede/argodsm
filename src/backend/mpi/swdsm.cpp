@@ -368,7 +368,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 		unsigned long prevsharer = (globalSharers[classidx])&id;
 		MPI_Win_unlock(workrank, sharerWindow);
 		if(prevsharer != id){
-			MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
+			MPI_Win_lock(MPI_LOCK_EXCLUSIVE, workrank, 0, sharerWindow);
 			sharers = globalSharers[classidx];
 			globalSharers[classidx] |= id;
 			MPI_Win_unlock(workrank, sharerWindow);
@@ -386,7 +386,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 				}
 				else{
 					/* update remote private holder to shared */
-					MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
+					MPI_Win_lock(MPI_LOCK_EXCLUSIVE, owner, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx,1,MPI_LONG,MPI_BOR,sharerWindow);
 					MPI_Win_unlock(owner, sharerWindow);
 				}
@@ -399,7 +399,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 		else{
 
 			/* get current sharers/writers and then add your own id */
-			MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
+			MPI_Win_lock(MPI_LOCK_EXCLUSIVE, workrank, 0, sharerWindow);
 			unsigned long sharers = globalSharers[classidx];
 			unsigned long writers = globalSharers[classidx+1];
 			globalSharers[classidx+1] |= id;
@@ -414,7 +414,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 						break;
 					}
 				}
-				MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, owner, 0, sharerWindow);
 				MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 				MPI_Win_unlock(owner, sharerWindow);
 			}
@@ -422,7 +422,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 				int n;
 				for(n=0; n<numtasks; n++){
 					if(n != workrank && ((1<<n)&sharers) != 0){
-						MPI_Win_lock(MPI_LOCK_SHARED, n, 0, sharerWindow);
+						MPI_Win_lock(MPI_LOCK_EXCLUSIVE, n, 0, sharerWindow);
 						MPI_Accumulate(&id, 1, MPI_LONG, n, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 						MPI_Win_unlock(n, sharerWindow);
 					}
@@ -545,7 +545,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 	MPI_Win_unlock(workrank, sharerWindow);
 	/* Either already registered write - or 1 or 0 other writers already cached */
 	if(writers != id && isPowerOf2(writers)){
-		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
+		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, workrank, 0, sharerWindow);
 		globalSharers[classidx+1] |= id; //register locally
 		MPI_Win_unlock(workrank, sharerWindow);
 
@@ -558,7 +558,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 		/* We get result of accumulation before operation so we need to account for that */
 		writers |= id;
 		/* Just add the (potentially) new sharers fetched to local copy */
-		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
+		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, workrank, 0, sharerWindow);
 		globalSharers[classidx] |= sharers;
 		MPI_Win_unlock(workrank, sharerWindow);
 
@@ -571,7 +571,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 					break;
 				}
 			}
-			MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
+			MPI_Win_lock(MPI_LOCK_EXCLUSIVE, owner, 0, sharerWindow);
 			MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 			MPI_Win_unlock(owner, sharerWindow);
 		}
@@ -579,7 +579,7 @@ void handler(int sig, siginfo_t *si, void *unused){
 			int n;
 			for(n=0; n<numtasks; n++){
 				if(n != workrank && ((1<<n)&sharers) != 0){
-					MPI_Win_lock(MPI_LOCK_SHARED, n, 0, sharerWindow);
+					MPI_Win_lock(MPI_LOCK_EXCLUSIVE, n, 0, sharerWindow);
 					MPI_Accumulate(&id, 1, MPI_LONG, n, classidx+1,1,MPI_LONG,MPI_BOR,sharerWindow);
 					MPI_Win_unlock(n, sharerWindow);
 				}
@@ -757,7 +757,7 @@ void * loadcacheline(void * x){
 			MPI_Win_unlock(homenode, sharerWindow);
 		}
 
-		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
+		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, workrank, 0, sharerWindow);
 		globalSharers[classidx] |= tempsharer;
 		globalSharers[classidx+1] |= tempwriter;
 		MPI_Win_unlock(workrank, sharerWindow);
@@ -773,7 +773,7 @@ void * loadcacheline(void * x){
 				}
 			}
 			if(owner != invalid_node) {
-				MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, owner, 0, sharerWindow);
 				MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx, 1, MPI_LONG, MPI_BOR, sharerWindow);
 				MPI_Win_unlock(owner, sharerWindow);
 			}
@@ -910,7 +910,7 @@ void * prefetchcacheline(void * x){
 			MPI_Win_unlock(homenode, sharerWindow);
 		}
 
-		MPI_Win_lock(MPI_LOCK_SHARED, workrank, 0, sharerWindow);
+		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, workrank, 0, sharerWindow);
 		globalSharers[classidx] |= tempsharer;
 		globalSharers[classidx+1] |= tempwriter;
 		MPI_Win_unlock(workrank, sharerWindow);
@@ -926,7 +926,7 @@ void * prefetchcacheline(void * x){
 				}
 			}
 			if(owner != invalid_node) {
-				MPI_Win_lock(MPI_LOCK_SHARED, owner, 0, sharerWindow);
+				MPI_Win_lock(MPI_LOCK_EXCLUSIVE, owner, 0, sharerWindow);
 				MPI_Accumulate(&id, 1, MPI_LONG, owner, classidx, 1, MPI_LONG, MPI_BOR, sharerWindow);
 				MPI_Win_unlock(owner, sharerWindow);
 			}
