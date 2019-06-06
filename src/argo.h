@@ -14,7 +14,9 @@
 
 /**
  * @brief initialize ArgoDSM system
- * @param size the desired size of the global memory in bytes
+ * @param size The desired size of the global memory in bytes, or 0. If the
+ *             value is specified as 0, then the value in environment
+ *             variable @ref ARGO_MEMORY_SIZE is used instead.
  */
 void argo_init(size_t size);
 
