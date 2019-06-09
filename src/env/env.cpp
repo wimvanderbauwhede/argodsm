@@ -21,10 +21,22 @@ namespace {
 	const std::size_t default_memory_size = 8ul*(1ul<<30); // default: 8GB
 
 	/**
+	 * @brief default requested cache size (if environment variable is unset)
+	 * @see @ref ARGO_CACHE_SIZE
+	 */
+	const std::size_t default_cache_size = 1ul<<30; // default: 1GB
+
+	/**
 	 * @brief environment variable used for requesting memory size
 	 * @see @ref ARGO_MEMORY_SIZE
 	 */
 	const std::string env_memory_size = "ARGO_MEMORY_SIZE";
+
+	/**
+	 * @brief environment variable used for requesting cache size
+	 * @see @ref ARGO_CACHE_SIZE
+	 */
+	const std::string env_cache_size = "ARGO_CACHE_SIZE";
 
 	/** @brief error message string */
 	const std::string msg_uninitialized = "argo::env::init() must be called before accessing environment values";
@@ -38,6 +50,11 @@ namespace {
 	 * @brief memory size requested through the environment variable @ref ARGO_MEMORY_SIZE
 	 */
 	std::size_t value_memory_size;
+
+	/**
+	 * @brief cache size requested through the environment variable @ref ARGO_CACHE_SIZE
+	 */
+	std::size_t value_cache_size;
 
 	/** @brief flag to allow checking that environment variables have been read before accessing their values */
 	bool is_initialized = false;
@@ -82,6 +99,7 @@ namespace argo {
 	namespace env {
 		void init() {
 			value_memory_size = parse_env(env_memory_size, default_memory_size).second;
+			value_cache_size = parse_env(env_cache_size, default_cache_size).second;
 
 			is_initialized = true;
 		}
@@ -89,6 +107,11 @@ namespace argo {
 		std::size_t memory_size() {
 			assert_initialized();
 			return value_memory_size;
+		}
+
+		std::size_t cache_size() {
+			assert_initialized();
+			return value_cache_size;
 		}
 
 	} // namespace env
