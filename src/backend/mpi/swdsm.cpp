@@ -1215,6 +1215,8 @@ void argo_finalize(){
 		MPI_Win_free(&globalDataWindow[i]);
 	}
 	MPI_Win_free(&sharerWindow);
+	MPI_Win_free(&lockWindow);
+	MPI_Comm_free(&workcomm);
 	MPI_Finalize();
 	return;
 }
