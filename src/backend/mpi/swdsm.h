@@ -315,12 +315,6 @@ unsigned long isPowerOf2(unsigned long x);
  */
 unsigned long getCacheIndex(unsigned long addr);
 /**
- * @brief Returns an address correspongint to the page addr is addressing
- * @param addr Address in the global address space
- * @return addr rounded down to nearest multiple of pagesize
- */
-unsigned long alignAddr(unsigned long addr);
-/**
  * @brief Gives homenode for a given address
  * @param addr Address in the global address space
  * @return Process ID of the node backing the memory containing addr
