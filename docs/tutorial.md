@@ -176,17 +176,18 @@ The final result of all the changes is this:
 {% include argo_example.cpp %}
 ```
 
-We can now compile the application. We assume that `${ARGO_INSTALL_DIRECTORY}` is
-where you installed ArgoDSM. If the ArgoDSM files are already in your
-`(LD_)LIBRARY_PATH` and include path, you can skip the `-L...` and `-I...`
-switches. If you have no idea what we are talking about, you should ask your
-system administrator.
+We can now compile the application. We assume that `${ARGO_INSTALL_DIRECTORY}`
+is where you installed ArgoDSM. If the ArgoDSM files are already in your
+`LIBRARY_PATH`, `INCLUDE_PATH`, and `LD_LIBRARY_PATH`, you can skip the
+`-L...`, `-I...`, and `-Wl,-rpath,...` switches. If you have no idea what we
+are talking about, you should ask your system administrator.
 
 ``` bash
-mpic++ -O3 -std=c++11 -o argo_example   \
-	-L${ARGO_INSTALL_DIRECTORY}/lib     \
-	-I${ARGO_INSTALL_DIRECTORY}/include \
-	argo_example.cpp -largo -largobackend-mpi
+mpic++ -O3 -std=c++11 -o argo_example            \
+       -L${ARGO_INSTALL_DIRECTORY}/lib           \
+       -I${ARGO_INSTALL_DIRECTORY}/include       \
+       -Wl,-rpath,${ARGO_INSTALL_DIRECTORY}/lib  \
+       argo_example.cpp -largo -largobackend-mpi
 ```
 
 This should produce an executable file that can be run with MPI. For
