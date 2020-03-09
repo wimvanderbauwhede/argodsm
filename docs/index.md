@@ -130,7 +130,7 @@ make install
 
 This step will copy the final ArgoDSM include files to `/usr/local/include` and
 libraries to `/usr/local/lib/`. You can choose a different path above if you
-want, but remember to either set `INCLUDE_PATH`, `LIBRARY_PATH`, and
+want, but remember to either set `LIBRARY_PATH`, `INCLUDE_PATH`, and
 `LD_LIBRARY_PATH` accordingly, or provide the correct paths (`-L`, `-I`, and
 `-Wl,-rpath,`) to your compiler when compiling applications for ArgoDSM.
 
