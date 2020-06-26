@@ -4,6 +4,7 @@ addons:
   apt:
     packages:￼
       - doxygen
+      - graphviz
       - openmpi-bin
       - libnuma-dev
       - libopenmpi-dev
