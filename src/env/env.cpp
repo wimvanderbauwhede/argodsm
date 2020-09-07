@@ -27,6 +27,18 @@ namespace {
 	const std::size_t default_cache_size = 1ul<<30; // default: 1GB
 
 	/**
+	 * @brief default requested write buffer size (if environment variable is unset)
+	 * @see @ref ARGO_WRITE_BUFFER_SIZE
+	 */
+	const std::size_t default_write_buffer_size = 512; // default: 512 cache blocks
+
+	/**
+	 * @brief default requested write buffer write back size (if environment variable is unset)
+	 * @see @ref ARGO_WRITE_BUFFER_WRITE_BACK_SIZE
+	 */
+	const std::size_t default_write_buffer_write_back_size = 32; // default: 32 pages
+
+	/**
 	 * @brief environment variable used for requesting memory size
 	 * @see @ref ARGO_MEMORY_SIZE
 	 */
@@ -37,6 +49,18 @@ namespace {
 	 * @see @ref ARGO_CACHE_SIZE
 	 */
 	const std::string env_cache_size = "ARGO_CACHE_SIZE";
+
+	/**
+	 * @brief environment variable used for requesting write buffer size
+	 * @see @ref ARGO_WRITE_BUFFER_SIZE
+	 */
+	const std::string env_write_buffer_size = "ARGO_WRITE_BUFFER_SIZE";
+
+	/**
+	 * @brief environment variable used for requesting write buffer write back size
+	 * @see @ref ARGO_WRITE_BUFFER_WRITE_BACK_SIZE
+	 */
+	const std::string env_write_buffer_write_back_size = "ARGO_WRITE_BUFFER_WRITE_BACK_SIZE";
 
 	/** @brief error message string */
 	const std::string msg_uninitialized = "argo::env::init() must be called before accessing environment values";
@@ -55,6 +79,16 @@ namespace {
 	 * @brief cache size requested through the environment variable @ref ARGO_CACHE_SIZE
 	 */
 	std::size_t value_cache_size;
+
+	/**
+	 * @brief write buffer size requested through the environment variable @ref ARGO_WRITE_BUFFER_SIZE
+	 */
+	std::size_t value_write_buffer_size;
+
+	/**
+	 * @brief write buffer write back size requested through the environment variable @ref ARGO_WRITE_BUFFER_WRITE_BACK_SIZE
+	 */
+	std::size_t value_write_buffer_write_back_size;
 
 	/** @brief flag to allow checking that environment variables have been read before accessing their values */
 	bool is_initialized = false;
@@ -100,6 +134,16 @@ namespace argo {
 		void init() {
 			value_memory_size = parse_env(env_memory_size, default_memory_size).second;
 			value_cache_size = parse_env(env_cache_size, default_cache_size).second;
+			value_write_buffer_size = parse_env(
+					env_write_buffer_size,
+					default_write_buffer_size).second;
+			value_write_buffer_write_back_size = parse_env(
+					env_write_buffer_write_back_size,
+					default_write_buffer_write_back_size).second;
+			// Limit the write buffer write back size to the write buffer size
+			if(value_write_buffer_write_back_size > value_write_buffer_size){
+				value_write_buffer_write_back_size = value_write_buffer_size;
+			}
 
 			is_initialized = true;
 		}
@@ -112,6 +156,16 @@ namespace argo {
 		std::size_t cache_size() {
 			assert_initialized();
 			return value_cache_size;
+		}
+
+		std::size_t write_buffer_size() {
+			assert_initialized();
+			return value_write_buffer_size;
+		}
+
+		std::size_t write_buffer_write_back_size() {
+			assert_initialized();
+			return value_write_buffer_write_back_size;
 		}
 
 	} // namespace env

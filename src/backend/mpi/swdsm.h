@@ -46,10 +46,6 @@
 /**@bug this limits amount of local threads because of pthread barriers being initialized at startup*/
 #define NUM_THREADS 128
 #endif
-/** @brief Number of pages in writebuffer */
-#ifndef WRITE_BUFFER_PAGES
-#define WRITE_BUFFER_PAGES 512L
-#endif
 
 /** @brief Read a value and always get the latest - 'Read-Through' */
 #ifdef __cplusplus
@@ -195,18 +191,6 @@ void argo_release();
  *        according to Release Consistency)
  */
 void argo_acq_rel();
-
-/*Reading and Writing pages*/
-/**
- * @brief Writes back the whole writebuffer (All dirty data on the node)
- */
-void flushWriteBuffer(void);
-
-/**
- * @brief Adds an entry to the writebuffer - if buffer is full writeback the least recent entry
- * @param cacheIndex index of cache that should be entered in the writebuffer
- */
-void addToWriteBuffer(unsigned long cacheIndex);
 
 /**
  * @brief stores a page remotely - only writing back what has been written locally since last synchronization point

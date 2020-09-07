@@ -6,6 +6,7 @@
 
 #include "../backend.hpp"
 #include "swdsm.h"
+#include "write_buffer.hpp"
 #include "virtual_memory/virtual_memory.hpp"
 
 // EXTERNAL VARIABLES FROM BACKEND
@@ -61,6 +62,11 @@ extern argo_byte *touchedcache;
  * @brief workcomm is needed to poke the MPI system during one sided RMA
  */
 extern MPI_Comm workcomm;
+/**
+ * @brief Write buffer to ensure selectively handled pages can be removed
+ * @deprecated This should eventually be handled by a cache module
+ */
+extern write_buffer<std::size_t>* argo_write_buffer;
 
 namespace argo {
 	namespace backend {
@@ -81,7 +87,6 @@ namespace argo {
 			// Lock relevant mutexes. Start statistics timekeeping
 			double t1 = MPI_Wtime();
 			pthread_mutex_lock(&cachemutex);
-			pthread_mutex_lock(&wbmutex);
 			sem_wait(&ibsem);
 
 			// Iterate over all pages to selectively invalidate
@@ -94,10 +99,11 @@ namespace argo {
 				// If the page is dirty, downgrade it
 				if(cacheControl[cache_index].dirty == DIRTY){
 					mprotect((char*)start_address + page_address, block_size, PROT_READ);
-					cacheControl[cache_index].dirty = CLEAN;
 					for(int i = 0; i <CACHELINE; i++){
 						storepageDIFF(cache_index+i,page_address+page_size*i);
 					}
+					argo_write_buffer->erase(cache_index);
+					cacheControl[cache_index].dirty = CLEAN;
 				}
 
 				// Optimization to keep pages in cache if they do not
@@ -140,7 +146,6 @@ namespace argo {
 
 			// Release relevant mutexes
 			sem_post(&ibsem);
-			pthread_mutex_unlock(&wbmutex);
 			pthread_mutex_unlock(&cachemutex);
 		}
 
@@ -159,7 +164,6 @@ namespace argo {
 			// Lock relevant mutexes. Start statistics timekeeping
 			double t1 = MPI_Wtime();
 			pthread_mutex_lock(&cachemutex);
-			pthread_mutex_lock(&wbmutex);
 			sem_wait(&ibsem);
 
 			// Iterate over all pages to selectively downgrade
@@ -171,10 +175,11 @@ namespace argo {
 				// If the page is dirty, downgrade it
 				if(cacheControl[cache_index].dirty == DIRTY){
 					mprotect((char*)start_address + page_address, block_size, PROT_READ);
-					cacheControl[cache_index].dirty = CLEAN;
 					for(int i = 0; i <CACHELINE; i++){
 						storepageDIFF(cache_index+i,page_address+page_size*i);
 					}
+					argo_write_buffer->erase(cache_index);
+					cacheControl[cache_index].dirty = CLEAN;
 				}
 			}
 			// Make sure to sync writebacks
@@ -194,7 +199,6 @@ namespace argo {
 
 			// Release relevant mutexes
 			sem_post(&ibsem);
-			pthread_mutex_unlock(&wbmutex);
 			pthread_mutex_unlock(&cachemutex);
 		}
 	} //namespace backend

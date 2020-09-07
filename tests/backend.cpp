@@ -5,6 +5,7 @@
  */
 
 #include <chrono>
+#include <random>
 
 #include "argo.hpp"
 #include "data_distribution/data_distribution.hpp"
@@ -488,7 +489,8 @@ TEST_F(backendTest, selectiveUnaligned) {
 		*flag = 1;
 		argo::backend::selective_release(flag, sizeof(unsigned));
 	}
-	// Read the set values on every other node to make sure they are cached
+	// Read the set values on every other node to make sure that some
+	// version of the pages involved are already cached
 	else{
 		int tmp = 0;
 		const int max_total = i_const*ua_chunk_size*2;
@@ -504,7 +506,7 @@ TEST_F(backendTest, selectiveUnaligned) {
 		argo::backend::selective_acquire(flag, sizeof(unsigned));
 	}
 
-	// Check the array values on every node
+	// Check the set array values on every node
 	argo::backend::selective_acquire(&array[ua_chunk_size*7231],
 			(ua_chunk_size*2)*sizeof(int));
 	int count = 0;
@@ -514,6 +516,51 @@ TEST_F(backendTest, selectiveUnaligned) {
 	}
 	ASSERT_EQ(count, expected);
 
+	// Clean up
+	argo::codelete_array(array);
+}
+
+/**
+ * @brief Test write buffer under load with random access patterns
+ */
+TEST_F(backendTest, writeBufferLoad) {
+	const std::size_t array_size = 4000000; // Just under max size 16Mb
+	const std::size_t num_writes = array_size/20; // Not too many random writes
+	int* array = argo::conew_array<int>(array_size);
+
+	// Random device to ensure accesses are irregular in order to expose
+	// random ordering between writebacks to different nodes
+	std::random_device rd;
+	std::mt19937 rng(rd());
+	std::uniform_int_distribution<int> dist(0,array_size-1);
+
+	// Initialize write buffer
+	if(argo::node_id() == 0){
+		for(std::size_t i=0; i<array_size; i++){
+			array[i] = 0;
+		}
+	}
+	argo::barrier();
+
+	// One node at a time, increment random elements num_writes times
+	for(int i=0; i<argo::number_of_nodes(); i++){
+		if(i == argo::node_id()){
+			for(std::size_t j=0; j<num_writes; j++){
+				array[dist(rng)]+=1;
+			}
+		}
+		argo::barrier();
+	}
+
+	// Check that each node incremented num_writes elements
+	if(argo::node_id() == 0){
+		int count = 0;
+		int expected = num_writes*argo::number_of_nodes();
+		for(std::size_t i=0; i<array_size; i++){
+			count += array[i];
+		}
+		ASSERT_EQ(count, expected);
+	}
 	// Clean up
 	argo::codelete_array(array);
 }
