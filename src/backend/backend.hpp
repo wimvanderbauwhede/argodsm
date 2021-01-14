@@ -118,6 +118,68 @@ namespace argo {
 		 */
 		void release();
 
+
+		/**
+		 * The following selective coherence functions are implemented individually
+		 * by each backend
+		 */
+
+		/**
+		 * @brief backend internal type erased function for selective acquire
+		 * @param addr pointer to the start of an ArgoDSM memory region
+		 * @param size size of the region pointed to by addr
+		 * @sa    selective_acquire
+		 * @warning For internal use only - DO NOT USE UNLESS YOU KNOW WHAT YOU ARE DOING
+		 */
+		void _selective_acquire(void* addr, std::size_t size);
+
+		/**
+		 * @brief backend internal type erased function for selective release
+		 * @param addr pointer to the start of an ArgoDSM memory region
+		 * @param size size of the region pointed to by addr
+		 * @sa    selective_release
+		 * @warning For internal use only - DO NOT USE UNLESS YOU KNOW WHAT YOU ARE DOING
+		 */
+		void _selective_release(void* addr, std::size_t size);
+
+		/**
+		 * The following selective coherence functions are generic interfaces to the
+		 * actual backend implementations
+		 */
+
+		/**
+		 * @brief causes a node to self-invalidate the specified pages from its cache,
+		 *        and thus getting any updated values on subsequent accesses
+		 * @param addr pointer to the start of the memory region to self-invalidate
+		 * @param size the size of the memory region pointed to by addr. A size equal
+		 *        to zero results in that no pages are selectively acquired.
+		 * @note  Selective coherence operations do not uphold the data consistency
+		 *        semantics of regular coherence operations and should be used with
+		 *        this in mind. Specifically, write ordering with respect to writes
+		 *        outside of the selective coherence region is not upheld.
+		 */
+		template<typename T>
+		void selective_acquire(T* addr, std::size_t size) {
+			_selective_acquire(static_cast<void*>(addr), size);
+		}
+
+		/**
+		 * @brief causes a node to self-downgrade specified pages from its cache,
+		 *        making all previous writes to be propagated to the homenode,
+		 *        visible for nodes calling acquire (or other synchronization primitives)
+		 * @param addr the start of the memory region to self-invalidate
+		 * @param size the size of the memory region pointed to by addr. A size equal
+		 *        to zero results in that no pages are selectively released.
+		 * @note  Selective coherence operations do not uphold the data consistency
+		 *        semantics of regular coherence operations and should be used with
+		 *        this in mind. Specifically, write ordering with respect to writes
+		 *        outside of the selective coherence region is not upheld.
+		 */
+		template<typename T>
+		void selective_release(T* addr, std::size_t size) {
+			_selective_release(static_cast<void*>(addr), size);
+		}
+
 		namespace atomic {
 			using namespace argo::atomic;
 

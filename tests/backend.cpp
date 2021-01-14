@@ -23,7 +23,7 @@ using global_uint = typename argo::data_distribution::global_ptr<unsigned>;
 using global_intptr = typename argo::data_distribution::global_ptr<int*>;
 
 /** @brief ArgoDSM memory size */
-constexpr std::size_t size = 1<<20; // 1MB
+constexpr std::size_t size = 1<<24; // 16MB
 /** @brief ArgoDSM cache size */
 constexpr std::size_t cache_size = size;
 
@@ -380,6 +380,142 @@ TEST_F(backendTest, atomicFetchAddPointer) {
 		int * old_ptr = argo::backend::atomic::fetch_add(ptr, 2);
 		ASSERT_EQ(2, *ptr.get() - old_ptr);
 	}
+}
+
+/**
+ * @brief Test selective coherence on a spinflag
+ */
+TEST_F(backendTest, selectiveSpin) {
+	unsigned int* flag(argo::conew_<unsigned>(0));
+	std::chrono::system_clock::time_point max_time =
+		std::chrono::system_clock::now() + deadlock_threshold;
+	// Set flag on node 0 and selectively downgrade it
+	if (argo::node_id() == 0) {
+		*flag = 1;
+		argo::backend::selective_release(flag, sizeof(unsigned));
+	}
+	// Wait for the flag change to be visible on every node
+	while(*flag != 1){
+		ASSERT_LT(std::chrono::system_clock::now(), max_time);
+		argo::backend::selective_acquire(flag, sizeof(unsigned));
+	}
+}
+
+/**
+ * @brief Test selective coherence on multiple pages
+ */
+TEST_F(backendTest, selectiveArray) {
+	const std::size_t array_size = 2097152;
+	unsigned int* flag(argo::conew_<unsigned>(0));
+	int* array = argo::conew_array<int>(array_size);
+	std::chrono::system_clock::time_point max_time =
+		std::chrono::system_clock::now() + deadlock_threshold;
+
+	// Initialize
+	if(argo::node_id() == 0){
+		for(std::size_t i=0; i<array_size; i++){
+			array[i] = 0;
+		}
+	}
+	argo::barrier();
+
+	// Set each array element on node 0, then set flag
+	if(argo::node_id() == 0){
+		for(std::size_t i=0; i<array_size; i++){
+			array[i] = i_const;
+		}
+		argo::backend::selective_release(array, array_size*sizeof(int));
+		*flag = 1;
+		argo::backend::selective_release(flag, sizeof(unsigned));
+	}
+	// Read each element on remote nodes to ensure they are cached
+	else {
+		int tmp;
+		const int max_total = i_const*array_size;
+		for(std::size_t i=0; i<array_size; i++){
+			tmp = array[i];
+		}
+		ASSERT_LE(tmp, max_total);
+	}
+
+	// Wait for the flag change to be visible on every node
+	while(*flag != 1){
+		ASSERT_LT(std::chrono::system_clock::now(), max_time);
+		argo::backend::selective_acquire(flag, sizeof(unsigned));
+	}
+
+	// Check the array values on every node
+	argo::backend::selective_acquire(array, array_size*sizeof(int));
+	int count = 0;
+	const int expected = i_const*array_size;
+	for(std::size_t i=0; i<array_size; i++){
+		count += array[i];
+	}
+	ASSERT_EQ(count, expected);
+
+	// Clean up
+	argo::codelete_array(array);
+}
+
+/**
+ * @brief Test selective coherence on unaligned acquires and releases
+ */
+TEST_F(backendTest, selectiveUnaligned) {
+	const std::size_t array_size = 2097152;
+	const std::size_t ua_chunk_size = 256;
+	int* array = argo::conew_array<int>(array_size);
+	unsigned int* flag(argo::conew_<unsigned>(0));
+	std::chrono::system_clock::time_point max_time =
+		std::chrono::system_clock::now() + deadlock_threshold;
+
+	// Initialize
+	if(argo::node_id() == 0){
+		for(std::size_t i=0; i<array_size; i++){
+			array[i] = 0;
+		}
+	}
+	argo::barrier();
+
+	// Set array elements on node 0, then set flag
+	if(argo::node_id() == 0){
+		// Write an unaligned chunk crossing a (remote node) boundary
+		for(std::size_t i=ua_chunk_size*7231; i<ua_chunk_size*7233; i++){
+			array[i] = i_const;
+		}
+		argo::backend::selective_release(&array[ua_chunk_size*7231],
+				(ua_chunk_size*2)*sizeof(int));
+
+		*flag = 1;
+		argo::backend::selective_release(flag, sizeof(unsigned));
+	}
+	// Read the set values on every other node to make sure they are cached
+	else{
+		int tmp = 0;
+		const int max_total = i_const*ua_chunk_size*2;
+		for(std::size_t i=ua_chunk_size*7231; i<ua_chunk_size*7233; i++){
+			tmp = array[i];
+		}
+		ASSERT_LE(tmp, max_total);
+	}
+
+	// Wait for the flag change to be visible on every node
+	while(*flag != 1){
+		ASSERT_LT(std::chrono::system_clock::now(), max_time);
+		argo::backend::selective_acquire(flag, sizeof(unsigned));
+	}
+
+	// Check the array values on every node
+	argo::backend::selective_acquire(&array[ua_chunk_size*7231],
+			(ua_chunk_size*2)*sizeof(int));
+	int count = 0;
+	const int expected = i_const*ua_chunk_size*2;
+	for(std::size_t i=0; i<array_size; i++){
+		count += array[i];
+	}
+	ASSERT_EQ(count, expected);
+
+	// Clean up
+	argo::codelete_array(array);
 }
 
 /**

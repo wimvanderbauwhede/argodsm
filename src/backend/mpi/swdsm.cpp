@@ -1220,6 +1220,8 @@ void clearStatistics(){
 	stats.loads = 0;
 	stats.barriers = 0;
 	stats.locks = 0;
+	stats.ssitime = 0;
+	stats.ssdtime = 0;
 }
 
 void storepageDIFF(unsigned long index, unsigned long addr){
@@ -1268,6 +1270,7 @@ void printStatistics(){
 	printf("     writebacktime+=(t2-t1): %lf\n",stats.writebacktime);
 	printf("# Storetime : %lf , loadtime :%lf flushtime:%lf, writebacktime: %lf\n",
 		stats.storetime, stats.loadtime, stats.flushtime, stats.writebacktime);
+	printf("# SSDtime:%lf, SSItime:%lf\n", stats.ssdtime, stats.ssitime);
 	printf("# Barriertime : %lf, selfinvtime %lf\n",stats.barriertime, stats.selfinvtime);
 	printf("stores:%lu, loads:%lu, barriers:%lu\n",stats.stores,stats.loads,stats.barriers);
 	printf("Locks:%d\n",stats.locks);
@@ -1278,6 +1281,6 @@ void printStatistics(){
 void *argo_get_global_base(){return startAddr;}
 size_t argo_get_global_size(){return size_of_all;}
 
-inline unsigned long get_classification_index(uint64_t addr){
+unsigned long get_classification_index(uint64_t addr){
 	return (2*(addr/(pagesize*CACHELINE))) % classificationSize;
 }

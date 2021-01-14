@@ -149,6 +149,16 @@ namespace argo {
 		void release() {
 			std::atomic_thread_fence(std::memory_order_release);
 		}
+		void _selective_acquire(void* addr, std::size_t size) {
+			(void)addr;
+			(void)size;
+			acquire();	// Selective acquire not actually possible here
+		}
+		void _selective_release(void* addr, std::size_t size) {
+			(void)addr;
+			(void)size;
+			release();	// Selective release not actually possible here
+		}
 
 		namespace atomic {
 			void _exchange(global_ptr<void> obj, void* desired,

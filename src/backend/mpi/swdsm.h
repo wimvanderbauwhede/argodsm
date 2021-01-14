@@ -105,6 +105,10 @@ typedef struct argo_statisticsStruct
 		unsigned long writebacks; 
 		/** @brief Number of locks */
 		int locks;
+		/** @brief Time spent performing selective acquire */
+		double ssitime;
+		/** @brief Time spent performing selective release */
+		double ssdtime;
 } argo_statistics;
 
 /*constants for control values*/
@@ -120,6 +124,13 @@ static const argo_byte DIRTY=3;
 static const argo_byte WRITER=4;
 /** @brief Constant for reader states */
 static const argo_byte READER=5;
+
+/**
+ * @brief The size of a hardware memory page
+ * @note  This should be better centralized for all
+ *        modules and backend implementations
+ */
+constexpr std::size_t page_size = 4096;
 
 /*Handler*/
 /**
@@ -331,6 +342,6 @@ unsigned long getOffset(unsigned long addr);
  * @param addr Address in the global address space
  * @return index for sharer vector for the page
  */
-inline unsigned long get_classification_index(uint64_t addr);
+unsigned long get_classification_index(uint64_t addr);
 #endif /* argo_swdsm_h */
 
