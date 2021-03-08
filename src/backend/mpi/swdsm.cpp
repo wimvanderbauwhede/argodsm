@@ -5,17 +5,19 @@
  */
 #include<cstddef>
 
+#include "env/env.hpp"
 #include "signal/signal.hpp"
 #include "virtual_memory/virtual_memory.hpp"
-#include "env/env.hpp"
+#include "data_distribution/global_ptr.hpp"
 #include "swdsm.h"
 #include "write_buffer.hpp"
 
+namespace dd = argo::data_distribution;
 namespace vm = argo::virtual_memory;
-namespace env = argo::env;
 namespace sig = argo::signal;
+namespace env = argo::env;
 
-/*Treads*/
+/*Threads*/
 /** @brief Thread loads data into cache */
 pthread_t loadthread1;
 /** @brief Thread loads data into cache with an overlapping request (some parts are done in parallel) */
@@ -133,6 +135,18 @@ unsigned long GLOBAL_NULL;
 /** @brief  Statistics */
 argo_statistics stats;
 
+/*First-Touch policy*/
+/** @brief  Holds the owner of a page */
+std::uintptr_t *global_owners;
+/** @brief  Size of the owner directory */
+std::size_t owner_size;
+/** @brief  Allocator offset for the node */
+std::size_t owner_offset;
+/** @brief  MPI window for communicating owner directory */
+MPI_Win owner_window;
+/** @brief  Spinlock to avoid "spinning" on the semaphore */
+std::mutex spin_mutex;
+
 namespace {
 	/** @brief constant for invalid ArgoDSM node */
 	constexpr unsigned long invalid_node = static_cast<unsigned long>(-1);
@@ -249,8 +263,8 @@ void handler(int sig, siginfo_t *si, void *unused){
 	/* compute start pointer of cacheline. char* has byte-wise arithmetics */
 	char* const aligned_access_ptr = static_cast<char*>(startAddr) + aligned_access_offset;
 	unsigned long startIndex = getCacheIndex(aligned_access_offset);
-	unsigned long homenode = getHomenode(aligned_access_offset);
-	unsigned long offset = getOffset(aligned_access_offset);
+	unsigned long homenode = getHomenode(aligned_access_offset, env::allocation_policy());
+	unsigned long offset = getOffset(aligned_access_offset, env::allocation_policy());
 	unsigned long id = 1 << getID();
 	unsigned long invid = ~id;
 
@@ -339,8 +353,14 @@ void handler(int sig, siginfo_t *si, void *unused){
 
 	if(state == INVALID || (tag != aligned_access_offset && tag != GLOBAL_NULL)) {
 		load_cache_entry(aligned_access_offset, (startIndex%cachesize));
-#ifdef DUAL_LOAD
-		prefetch_cache_entry((aligned_access_offset+CACHELINE*pagesize), ((startIndex+CACHELINE)%cachesize));
+#if DUAL_LOAD == 1
+		/** 
+		 * @note temporary solution for nodes to avoid claiming ownership of pages that
+		 *       they are not able to host in their backing store under first-touch.
+		 */
+		if (!dd::is_first_touch_policy()) {
+			prefetch_cache_entry((aligned_access_offset+CACHELINE*pagesize), ((startIndex+CACHELINE)%cachesize));
+		}
 #endif
 		pthread_mutex_unlock(&cachemutex);
 		double t2 = MPI_Wtime();
@@ -420,19 +440,36 @@ void handler(int sig, siginfo_t *si, void *unused){
 }
 
 
-unsigned long getHomenode(unsigned long addr){
-	unsigned long homenode = addr/size_of_chunk;
-	if(homenode >=(unsigned long)numtasks){
-		exit(EXIT_FAILURE);
+unsigned long getHomenode(unsigned long addr, char cloc){
+	std::size_t homenode;
+	if (cloc == dd::memory_policy::first_touch) {
+		std::lock_guard<std::mutex> lock(spin_mutex);
+		sem_wait(&ibsem);
+		dd::global_ptr<char> gptr(reinterpret_cast<char*>(
+				addr + reinterpret_cast<unsigned long>(startAddr)), __func__);
+		homenode = gptr.node();
+		sem_post(&ibsem);
+	} else {
+		dd::global_ptr<char> gptr(reinterpret_cast<char*>(
+				addr + reinterpret_cast<unsigned long>(startAddr)), __func__);
+		homenode = gptr.node();
 	}
 	return homenode;
 }
 
-unsigned long getOffset(unsigned long addr){
-	//offset in local memory on remote node (homenode)
-	unsigned long offset = addr - (getHomenode(addr))*size_of_chunk;
-	if(offset >=size_of_chunk){
-		exit(EXIT_FAILURE);
+unsigned long getOffset(unsigned long addr, char cloc){
+	std::size_t offset;
+	if (cloc == dd::memory_policy::first_touch) {
+		std::lock_guard<std::mutex> lock(spin_mutex);
+		sem_wait(&ibsem);
+		dd::global_ptr<char> gptr(reinterpret_cast<char*>(
+				addr + reinterpret_cast<unsigned long>(startAddr)), __func__);
+		offset = gptr.offset();
+		sem_post(&ibsem);
+	} else {
+		dd::global_ptr<char> gptr(reinterpret_cast<char*>(
+				addr + reinterpret_cast<unsigned long>(startAddr)), __func__);
+		offset = gptr.offset();
 	}
 	return offset;
 }
@@ -750,6 +787,10 @@ unsigned int getThreadCount(){
 	return NUM_THREADS;
 }
 
+std::size_t& get_local_data_offset(){
+	return owner_offset;
+}
+
 //My sort of allocatefunction now since parmacs macros had this design
 void * argo_gmalloc(unsigned long size){
 	if(argo_get_nodes()==1){return malloc(size);}
@@ -805,7 +846,7 @@ void argo_initialize(std::size_t argo_size, std::size_t cache_size){
 
 	/** Standardise the ArgoDSM memory space */
 	argo_size = std::max(argo_size, static_cast<std::size_t>(pagesize*numtasks));
-	argo_size = align_forwards(argo_size, pagesize*CACHELINE*numtasks);
+	argo_size = align_forwards(argo_size, pagesize*CACHELINE*numtasks*dd::policy_padding());
 
 	startAddr = vm::start_address();
 #ifdef ARGO_PRINT_STATISTICS
@@ -827,6 +868,8 @@ void argo_initialize(std::size_t argo_size, std::size_t cache_size){
 
 	classificationSize = 2*cachesize; // Could be smaller ?
 	argo_write_buffer = new write_buffer<std::size_t>();
+
+	owner_offset = 0;
 
 	barwindowsused = (char *)malloc(numtasks*sizeof(char));
 	for(i = 0; i < numtasks; i++){
@@ -860,6 +903,10 @@ void argo_initialize(std::size_t argo_size, std::size_t cache_size){
 	cacheControlSize = align_forwards(cacheControlSize, pagesize);
 	gwritersize = align_forwards(gwritersize, pagesize);
 
+	owner_size = 2*(argo_size/pagesize);
+	std::size_t owner_size_bytes = owner_size*sizeof(std::size_t);
+	owner_size_bytes = align_forwards(owner_size_bytes, pagesize);
+
 	cacheoffset = pagesize*cachesize+cacheControlSize;
 
 	globalData = static_cast<char*>(vm::allocate_mappable(pagesize, size_of_chunk));
@@ -875,6 +922,10 @@ void argo_initialize(std::size_t argo_size, std::size_t cache_size){
 	lockbuffer = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, pagesize));
 	pagecopy = static_cast<char*>(vm::allocate_mappable(pagesize, cachesize*pagesize));
 	globalSharers = static_cast<unsigned long*>(vm::allocate_mappable(pagesize, gwritersize));
+
+	if (dd::is_first_touch_policy()) {
+		global_owners = static_cast<std::uintptr_t*>(vm::allocate_mappable(pagesize, owner_size_bytes));
+	}
 
 	char processor_name[MPI_MAX_PROCESSOR_NAME];
 	int name_len;
@@ -902,6 +953,12 @@ void argo_initialize(std::size_t argo_size, std::size_t cache_size){
 	tmpcache=lockbuffer;
 	vm::map_memory(tmpcache, pagesize, current_offset, PROT_READ|PROT_WRITE);
 
+	if (dd::is_first_touch_policy()) {
+		current_offset += pagesize;
+		tmpcache=global_owners;
+		vm::map_memory(tmpcache, owner_size_bytes, current_offset, PROT_READ|PROT_WRITE);
+	}
+
 	sem_init(&ibsem,0,1);
 	sem_init(&globallocksem,0,1);
 
@@ -917,6 +974,11 @@ void argo_initialize(std::size_t argo_size, std::size_t cache_size){
 								 MPI_INFO_NULL, MPI_COMM_WORLD, &sharerWindow);
 	MPI_Win_create(lockbuffer, pagesize, 1, MPI_INFO_NULL, MPI_COMM_WORLD, &lockWindow);
 
+	if (dd::is_first_touch_policy()) {
+		MPI_Win_create(global_owners, owner_size_bytes, sizeof(std::uintptr_t),
+									 MPI_INFO_NULL, MPI_COMM_WORLD, &owner_window);
+	}
+
 	memset(pagecopy, 0, cachesize*pagesize);
 	memset(touchedcache, 0, cachesize);
 	memset(globalData, 0, size_of_chunk*sizeof(argo_byte));
@@ -924,6 +986,10 @@ void argo_initialize(std::size_t argo_size, std::size_t cache_size){
 	memset(lockbuffer, 0, pagesize);
 	memset(globalSharers, 0, gwritersize);
 	memset(cacheControl, 0, cachesize*sizeof(control_data));
+
+	if (dd::is_first_touch_policy()) {
+		memset(global_owners, 0, owner_size_bytes);
+	}
 
 	for(j=0; j<cachesize; j++){
 		cacheControl[j].tag = GLOBAL_NULL;
@@ -956,6 +1022,9 @@ void argo_finalize(){
 	}
 	MPI_Win_free(&sharerWindow);
 	MPI_Win_free(&lockWindow);
+	if (dd::is_first_touch_policy()) {
+		MPI_Win_free(&owner_window);
+	}
 	MPI_Comm_free(&workcomm);
 	MPI_Finalize();
 	return;
@@ -1049,6 +1118,21 @@ void argo_reset_coherence(int n){
 		globalSharers[j] = 0;
 	}
 	MPI_Win_unlock(workrank, sharerWindow);
+	
+	if (dd::is_first_touch_policy()) {
+		/**
+		 * @note initialize homenode and offset for each page
+		 *       in the first-touch directory to magic values.
+		 *       0 - this page doesn't have a home node
+		 *       GLOBAL_NULL - backing store offset is invalid
+		 */
+		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, workrank, 0, owner_window);
+		for(j = 0; j < owner_size; j += 2) {
+			global_owners[j] = 0;
+			global_owners[j+1] = GLOBAL_NULL;
+		}
+		MPI_Win_unlock(workrank, owner_window);
+	}
 	sem_post(&ibsem);
 	swdsm_argo_barrier(n);
 	mprotect(startAddr,size_of_all,PROT_NONE);

@@ -250,6 +250,13 @@ unsigned int argo_get_nodes();
 unsigned int getThreadCount();
 
 /**
+ * @brief Gives the backing memory offset of the ArgoDSM node for the local process
+ * @return Returns the reference to the current offset for the local process
+ * @note Implementation-specific function for the first-touch data distribution
+ */
+std::size_t& get_local_data_offset();
+
+/**
  * @brief Gives a pointer to the global address space
  * @return Start address of the global address space
  */
@@ -312,15 +319,17 @@ unsigned long getCacheIndex(unsigned long addr);
 /**
  * @brief Gives homenode for a given address
  * @param addr Address in the global address space
+ * @param cloc Used to identify the call location in the code
  * @return Process ID of the node backing the memory containing addr
  */
-unsigned long getHomenode(unsigned long addr);
+unsigned long getHomenode(unsigned long addr, char cloc = 0);
 /**
  * @brief Gets the offset of an address on the local nodes part of the global memory
  * @param addr Address in the global address space
+ * @param cloc Used to identify the call location in the code
  * @return addr-(start address of local process part of global memory)
  */
-unsigned long getOffset(unsigned long addr);
+unsigned long getOffset(unsigned long addr, char cloc = 0);
 /**
  * @brief Gives an index to the sharer/writer vector depending on the address
  * @param addr Address in the global address space

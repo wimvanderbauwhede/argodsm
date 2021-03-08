@@ -4,7 +4,7 @@
  * @copyright Eta Scale AB. Licensed under the Eta Scale Open Source License. See the LICENSE file for details.
  */
 
-#include "data_distribution/data_distribution.hpp"
+#include "data_distribution/global_ptr.hpp"
 #include "signal/signal.hpp"
 #include "synchronization/global_tas_lock.hpp"
 #include "types/types.hpp"
@@ -57,6 +57,12 @@ char* memory;
  */
 std::size_t memory_size;
 
+/*First-Touch policy*/
+/** @brief holds the owner of a page */
+std::uintptr_t *global_owners;
+/** @brief allocator offset for the node */
+std::size_t owner_offset;
+
 /**
  * @brief a dummy signal handler function
  * @warning this function is not strictly portable because it resets the handler and re-raises the signal
@@ -80,8 +86,24 @@ namespace argo {
 			memory = static_cast<char*>(vm::allocate_mappable(4096, argo_size));
 			memory_size = argo_size;
 			using namespace data_distribution;
-			naive_data_distribution<0>::set_memory_space(nodes, memory, argo_size);
+			base_distribution<0>::set_memory_space(nodes, memory, argo_size);
 			sig::signal_handler<SIGSEGV>::install_argo_handler(&singlenode_handler);
+			/** @note first-touch needs a directory for fetching
+			 *        the homenode and offset for an address */
+			if (is_first_touch_policy()) {
+				/* calculate the directory size and allocate memory */
+				owner_offset = 0;
+				std::size_t owner_size = 2*(argo_size/4096UL);
+				std::size_t owner_size_bytes = owner_size*sizeof(std::size_t);
+				owner_size_bytes = (1 + ((owner_size_bytes-1) / 4096UL))*4096UL;
+				global_owners = static_cast<std::uintptr_t*>(vm::allocate_mappable(4096UL, owner_size_bytes));
+				/* hardcode first-touch directory values so
+				   that we perform only load operations */
+				for(std::size_t j = 0; j < owner_size; j += 2) {
+					global_owners[j] = 0x1UL;
+					global_owners[j+1] = j/2 * 4096UL;
+				}
+			}
 		}
 
 		node_id_t node_id() {
@@ -90,6 +112,10 @@ namespace argo {
 
 		int number_of_nodes() {
 			return nodes;
+		}
+
+		std::size_t& backing_offset() {
+			return owner_offset;
 		}
 
 		char* global_base() {
@@ -173,10 +199,35 @@ namespace argo {
 				memcpy(obj.get(), desired, size);
 			}
 
+			void _store_public_dir(const void* desired,
+					const std::size_t size, const std::size_t rank, const std::size_t disp) {
+				(void)desired;
+				(void)size;
+				(void)rank;
+				(void)disp;
+			}
+
+			void _store_local_dir(const std::size_t desired,
+					const std::size_t rank, const std::size_t disp) {
+				(void)desired;
+				(void)rank;
+				(void)disp;
+			}
+
 			void _load(
 					global_ptr<void> obj, std::size_t size, void* output_buffer) {
 				lock_guard lock(atomic_op_mutex);
 				memcpy(output_buffer, obj.get(), size);
+			}
+
+			/**
+			 * @note only load operations are performed on the first-touch
+			 *       directory, since the values are hardcoded in the init call
+			 */
+			void _load_local_dir(void* output_buffer,
+					const std::size_t rank, const std::size_t disp) {
+				(void)rank;
+				*(static_cast<std::size_t*>(output_buffer)) = global_owners[disp];
 			}
 
 			void _compare_exchange(global_ptr<void> obj, void* desired,
@@ -186,6 +237,16 @@ namespace argo {
 				if (memcmp(obj.get(), expected, size) == 0) {
 					memcpy(obj.get(), desired, size);
 				}
+			}
+
+			void _compare_exchange_dir(const void* desired, const void* expected, void* output_buffer,
+					const std::size_t size, const std::size_t rank, const std::size_t disp) {
+				(void)desired;
+				(void)expected;
+				(void)output_buffer;
+				(void)size;
+				(void)rank;
+				(void)disp;
 			}
 
 			void _fetch_add_int(global_ptr<void> obj, void* value,
