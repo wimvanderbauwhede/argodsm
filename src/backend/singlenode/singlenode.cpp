@@ -84,6 +84,7 @@ namespace argo {
 			memory = static_cast<char*>(vm::allocate_mappable(4096, argo_size));
 			memory_size = argo_size;
 			using namespace data_distribution;
+			//WV maybe I need mine in here, with a condition is_halo_policy()
 			base_distribution<0>::set_memory_space(nodes, memory, argo_size);
 			sig::signal_handler<SIGSEGV>::install_argo_handler(&singlenode_handler);
 			/** @note first-touch needs a directory for fetching

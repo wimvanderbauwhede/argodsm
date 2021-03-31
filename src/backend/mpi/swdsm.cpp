@@ -1010,13 +1010,13 @@ void argo_finalize(){
 	swdsm_argo_barrier(1);
 	mprotect(startAddr,size_of_all,PROT_WRITE|PROT_READ);
 	MPI_Barrier(MPI_COMM_WORLD);
-
+	if (env::print_statistics()==1) {
 	for(i=0; i <numtasks;i++){
 		if(i==workrank){
 			printStatistics();
 		}
 	}
-
+	}
 	MPI_Barrier(MPI_COMM_WORLD);
 	for(i=0; i<numtasks; i++){
 		MPI_Win_free(&globalDataWindow[i]);

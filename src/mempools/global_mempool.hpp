@@ -22,7 +22,7 @@ constexpr int PAGESIZE = 4096;
 namespace argo {
 	namespace mempools {
 		/**
-		 * @brief Globalally growing memory pool
+		 * @brief Globally growing memory pool
 		 */
 		template<std::size_t chunk_size=4096>
 		class global_memory_pool {

@@ -86,6 +86,8 @@ namespace {
 	 */
 	const std::string env_allocation_block_size = "ARGO_ALLOCATION_BLOCK_SIZE";
 
+	const std::string env_print_statistics = "ARGO_PRINT_STATISTICS";
+
 	/** @brief error message string */
 	const std::string msg_uninitialized = "argo::env::init() must be called before accessing environment values";
 	/** @brief error message string */
@@ -123,6 +125,8 @@ namespace {
 	 * @brief allocation block size requested through the environment variable @ref ARGO_ALLOCATION_BLOCK_SIZE
 	 */
 	std::size_t value_allocation_block_size;
+
+	std::size_t value_print_statistics;
 
 	/** @brief flag to allow checking that environment variables have been read before accessing their values */
 	bool is_initialized = false;
@@ -182,6 +186,8 @@ namespace argo {
 			value_allocation_policy = parse_env(env_allocation_policy, default_allocation_policy).second;
 			value_allocation_block_size = parse_env(env_allocation_block_size, default_allocation_block_size).second;
 
+            value_print_statistics = parse_env(env_print_statistics, 0).second;
+
 			is_initialized = true;
 		}
 
@@ -214,6 +220,11 @@ namespace argo {
 			assert_initialized();
 			return value_allocation_block_size;
 		}
+
+        std::size_t print_statistics() {
+			assert_initialized();
+			return value_print_statistics;
+        }
 
 	} // namespace env
 } // namespace argo

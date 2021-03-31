@@ -97,6 +97,7 @@ namespace argo {
 		 * @see @ref ARGO_ALLOCATION_BLOCK_SIZE
 		 */
 		std::size_t allocation_block_size();
+		std::size_t  print_statistics();
 	} // namespace env
 } // namespace argo
 

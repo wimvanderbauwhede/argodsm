@@ -32,7 +32,8 @@ namespace argo {
 
 				/** @brief array holding an instance of each available policy */
 				static Dist* policies[5];
-
+				//WV
+				// static Dist* policies[7]; // and later there will be 12
 			public:
 				/** @brief construct nullptr */
 				global_ptr() : homenode(-1), local_offset(0) {}
@@ -115,6 +116,15 @@ namespace argo {
 			new skew_mapp_distribution<0>,
 			new prime_mapp_distribution<0>,
 			new first_touch_distribution<0>
+			// WV: absolutely need these
+			// ,new halo_distribution_1D<0> // 1D_x
+			// ,new halo_distribution_2D<0> // 2D_xy
+			// WV: for later
+			// ,new halo_distribution_3D<0>
+			// ,new halo_distribution_1D_y<0>
+			// ,new halo_distribution_1D_z<0>
+			// ,new halo_distribution_2D_xz<0>
+			// ,new halo_distribution_2D_yz<0>
 		};
 	} // namespace data_distribution
 } // namespace argo

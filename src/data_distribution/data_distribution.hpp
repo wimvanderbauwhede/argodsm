@@ -12,7 +12,8 @@
 #include "skew_mapp_distribution.hpp"
 #include "prime_mapp_distribution.hpp"
 #include "first_touch_distribution.hpp"
-
+//WV
+// #include "halo_distribution.hpp
 /**
  * @note backend.hpp is not included here as it includes global_ptr.hpp,
  *       which means that the data distribution definitions precede the
@@ -74,6 +75,7 @@ namespace argo {
 			 * @see @ref ARGO_ALLOCATION_POLICY
 			 */
 			first_touch
+			//WV mine go here
 		};
 
 		/**
@@ -113,6 +115,18 @@ namespace argo {
 			std::size_t policy = env::allocation_policy();
 			return (policy == first_touch) ? true : false;
 		}
+
+		//WV
+		/**
+		 * @brief identifies if we distribute data using
+		 *        the halo memory policy
+		 * @return true if we utilize the halo policy
+		 *         false if we don't utilize halo policy
+		 */
+		// static inline bool is_halo_policy() {
+		// 	std::size_t policy = env::allocation_policy();
+		// 	return (policy == halo) ? true : false;
+		// }		
 
 		/**
 		 * @brief based on the chosen policy, gets the required

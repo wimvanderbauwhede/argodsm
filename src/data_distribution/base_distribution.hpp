@@ -54,6 +54,8 @@ namespace argo {
 				 * @param start pointer to the memory space
 				 * @param size size of the memory space
 				 */
+				// WV I can't override so I need set_haloed_memory_space
+                // Or maybe not: this is used in init(), not in conew_array
 				static void set_memory_space(const node_id_t n, char* const start, const std::size_t size) {
 					nodes = n;
 					start_address = start;
